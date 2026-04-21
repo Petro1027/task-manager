@@ -7,6 +7,18 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum ColumnKey {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
 model User {
   id           String   @id @default(cuid())
   name         String
@@ -14,4 +26,85 @@ model User {
   passwordHash String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  boards        Board[]
+  authoredTasks Task[]
+}
+
+model Board {
+  id        String   @id @default(cuid())
+  title     String
+  ownerId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner   User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  columns Column[]
+  tasks   Task[]
+  tags    Tag[]
+
+  @@index([ownerId])
+}
+
+model Column {
+  id       String    @id @default(cuid())
+  boardId  String
+  key      ColumnKey
+  title    String
+  position Int
+
+  board Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  tasks Task[]
+
+  @@unique([boardId, key])
+  @@index([boardId])
+}
+
+model Task {
+  id          String       @id @default(cuid())
+  boardId     String
+  columnId    String
+  authorId    String
+  title       String
+  description String?
+  priority    TaskPriority @default(MEDIUM)
+  category    String?
+  dueDate     DateTime?
+  archived    Boolean      @default(false)
+  position    Int
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  board    Board     @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  column   Column    @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  taskTags TaskTag[]
+
+  @@index([boardId])
+  @@index([columnId])
+  @@index([authorId])
+}
+
+model Tag {
+  id      String @id @default(cuid())
+  name    String
+  color   String
+  boardId String
+
+  board    Board     @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  taskTags TaskTag[]
+
+  @@unique([boardId, name])
+  @@index([boardId])
+}
+
+model TaskTag {
+  taskId String
+  tagId  String
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, tagId])
+  @@index([tagId])
 }
