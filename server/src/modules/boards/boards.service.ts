@@ -17,6 +17,17 @@ async function getDemoUserOrThrow() {
   return user;
 }
 
+async function getOwnedBoardOrNull(boardId: string) {
+  const user = await getDemoUserOrThrow();
+
+  return prisma.board.findFirst({
+    where: {
+      id: boardId,
+      ownerId: user.id,
+    },
+  });
+}
+
 export async function getBoards() {
   const user = await getDemoUserOrThrow();
 
@@ -40,6 +51,75 @@ export async function getBoards() {
     orderBy: {
       createdAt: "desc",
     },
+  });
+}
+
+export async function getBoardById(boardId: string) {
+  const user = await getDemoUserOrThrow();
+
+  return prisma.board.findFirst({
+    where: {
+      id: boardId,
+      ownerId: user.id,
+    },
+    include: {
+      columns: {
+        orderBy: {
+          position: "asc",
+        },
+      },
+      tags: {
+        orderBy: {
+          name: "asc",
+        },
+      },
+      _count: {
+        select: {
+          tasks: true,
+          tags: true,
+        },
+      },
+    },
+  });
+}
+
+export async function getBoardTasks(boardId: string) {
+  const board = await getOwnedBoardOrNull(boardId);
+
+  if (!board) {
+    return null;
+  }
+
+  return prisma.task.findMany({
+    where: {
+      boardId,
+    },
+    include: {
+      column: {
+        select: {
+          id: true,
+          key: true,
+          title: true,
+          position: true,
+        },
+      },
+      taskTags: {
+        include: {
+          tag: true,
+        },
+      },
+    },
+    orderBy: [
+      {
+        archived: "asc",
+      },
+      {
+        position: "asc",
+      },
+      {
+        createdAt: "desc",
+      },
+    ],
   });
 }
 
