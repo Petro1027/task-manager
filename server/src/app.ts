@@ -2,6 +2,7 @@ import cors from "cors";
 import express from "express";
 import { env } from "./config/env";
 import boardsRoutes from "./modules/boards/boards.routes";
+import tasksRoutes from "./modules/tasks/tasks.routes";
 
 const app = express();
 
@@ -26,13 +27,21 @@ app.get("/api/health", (_request, response) => {
 });
 
 app.use("/api/boards", boardsRoutes);
+app.use("/api/tasks", tasksRoutes);
 
-app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
-  console.error(error);
+app.use(
+  (
+    error: unknown,
+    _request: express.Request,
+    response: express.Response,
+    _next: express.NextFunction,
+  ) => {
+    console.error(error);
 
-  response.status(500).json({
-    message: "Internal server error.",
-  });
-});
+    response.status(500).json({
+      message: "Internal server error.",
+    });
+  },
+);
 
 export default app;
