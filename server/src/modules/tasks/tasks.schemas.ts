@@ -26,12 +26,22 @@ export const updateTaskBodySchema = z
     priority: z.nativeEnum(TaskPriority).optional(),
     category: z.string().trim().max(100, "Category is too long").nullable().optional(),
     dueDate: z.string().datetime().nullable().optional(),
-    columnKey: z.nativeEnum(ColumnKey).optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: "At least one field must be provided.",
   });
 
+export const moveTaskBodySchema = z.object({
+  columnKey: z.nativeEnum(ColumnKey),
+  position: z.number().int().min(0, "Position must be 0 or greater"),
+});
+
+export const archiveTaskBodySchema = z.object({
+  archived: z.boolean(),
+});
+
 export type CreateTaskBody = z.infer<typeof createTaskBodySchema>;
 export type UpdateTaskBody = z.infer<typeof updateTaskBodySchema>;
+export type MoveTaskBody = z.infer<typeof moveTaskBodySchema>;
+export type ArchiveTaskBody = z.infer<typeof archiveTaskBodySchema>;
 export type TaskParams = z.infer<typeof taskParamsSchema>;

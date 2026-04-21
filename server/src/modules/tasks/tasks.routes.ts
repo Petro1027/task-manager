@@ -1,7 +1,18 @@
 import { Router } from "express";
 import { ZodError } from "zod";
-import { deleteTaskById, getTaskById, updateTaskById } from "./tasks.service";
-import { taskParamsSchema, updateTaskBodySchema } from "./tasks.schemas";
+import {
+  archiveTaskById,
+  deleteTaskById,
+  getTaskById,
+  moveTaskById,
+  updateTaskById,
+} from "./tasks.service";
+import {
+  archiveTaskBodySchema,
+  moveTaskBodySchema,
+  taskParamsSchema,
+  updateTaskBodySchema,
+} from "./tasks.schemas";
 
 const router = Router();
 
@@ -22,6 +33,62 @@ router.get("/:taskId", async (request, response, next) => {
     if (error instanceof ZodError) {
       response.status(400).json({
         message: "Invalid route params.",
+        errors: error.flatten(),
+      });
+      return;
+    }
+
+    next(error);
+  }
+});
+
+router.patch("/:taskId/archive", async (request, response, next) => {
+  try {
+    const params = taskParamsSchema.parse(request.params);
+    const body = archiveTaskBodySchema.parse(request.body);
+
+    const task = await archiveTaskById(params.taskId, body.archived);
+
+    if (!task) {
+      response.status(404).json({
+        message: "Task not found.",
+      });
+      return;
+    }
+
+    response.status(200).json(task);
+  } catch (error) {
+    if (error instanceof ZodError) {
+      response.status(400).json({
+        message: "Invalid request.",
+        errors: error.flatten(),
+      });
+      return;
+    }
+
+    next(error);
+  }
+});
+
+router.patch("/:taskId/move", async (request, response, next) => {
+  try {
+    const params = taskParamsSchema.parse(request.params);
+    const body = moveTaskBodySchema.parse(request.body);
+
+    const task = await moveTaskById(params.taskId, body);
+
+    if (!task) {
+      response.status(404).json({
+        message: "Task not found.",
+      });
+      return;
+    }
+
+    response.status(200).json(task);
+  } catch (error) {
+    if (error instanceof ZodError) {
+      response.status(400).json({
+        message: "Invalid request.",
         errors: error.flatten(),
       });
       return;

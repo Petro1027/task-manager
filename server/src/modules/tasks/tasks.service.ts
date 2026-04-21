@@ -3,6 +3,10 @@ import prisma from "../../lib/prisma";
 
 const DEMO_USER_EMAIL = "demo@example.com";
 
+function clampPosition(position: number, maxPosition: number) {
+  return Math.max(0, Math.min(position, maxPosition));
+}
+
 async function getDemoUserOrThrow() {
   const user = await prisma.user.findUnique({
     where: {
@@ -45,7 +49,7 @@ export async function createTaskForBoard(input: {
   priority?: TaskPriority;
   category?: string;
   dueDate?: string;
-  columnKey: "TODO" | "IN_PROGRESS" | "DONE";
+  columnKey: ColumnKey;
 }) {
   const user = await getDemoUserOrThrow();
 
@@ -81,7 +85,7 @@ export async function createTaskForBoard(input: {
 
   const nextPosition = lastTask ? lastTask.position + 1 : 0;
 
-  const createdTask = await prisma.task.create({
+  return prisma.task.create({
     data: {
       boardId: board.id,
       columnId: targetColumn.id,
@@ -110,8 +114,6 @@ export async function createTaskForBoard(input: {
       },
     },
   });
-
-  return createdTask;
 }
 
 export async function getTaskById(taskId: string) {
@@ -156,38 +158,12 @@ export async function updateTaskById(
     priority?: TaskPriority;
     category?: string | null;
     dueDate?: string | null;
-    columnKey?: ColumnKey;
   },
 ) {
   const task = await getOwnedTaskOrNull(taskId);
 
   if (!task) {
     return null;
-  }
-
-  let nextColumnId = task.columnId;
-  let nextPosition = task.position;
-
-  if (input.columnKey && input.columnKey !== task.column.key) {
-    const targetColumn = task.board.columns.find((column) => column.key === input.columnKey);
-
-    if (!targetColumn) {
-      throw new Error("Target column not found for board.");
-    }
-
-    nextColumnId = targetColumn.id;
-
-    const lastTaskInTargetColumn = await prisma.task.findFirst({
-      where: {
-        boardId: task.boardId,
-        columnId: targetColumn.id,
-      },
-      orderBy: {
-        position: "desc",
-      },
-    });
-
-    nextPosition = lastTaskInTargetColumn ? lastTaskInTargetColumn.position + 1 : 0;
   }
 
   const data: Prisma.TaskUpdateInput = {};
@@ -210,15 +186,6 @@ export async function updateTaskById(
 
   if (input.dueDate !== undefined) {
     data.dueDate = input.dueDate ? new Date(input.dueDate) : null;
-  }
-
-  if (input.columnKey !== undefined) {
-    data.column = {
-      connect: {
-        id: nextColumnId,
-      },
-    };
-    data.position = nextPosition;
   }
 
   return prisma.task.update({
@@ -267,4 +234,201 @@ export async function deleteTaskById(taskId: string) {
     id: task.id,
     message: "Task deleted successfully.",
   };
+}
+
+export async function archiveTaskById(taskId: string, archived: boolean) {
+  const task = await getOwnedTaskOrNull(taskId);
+
+  if (!task) {
+    return null;
+  }
+
+  return prisma.task.update({
+    where: {
+      id: task.id,
+    },
+    data: {
+      archived,
+    },
+    include: {
+      board: {
+        select: {
+          id: true,
+          title: true,
+        },
+      },
+      column: {
+        select: {
+          id: true,
+          key: true,
+          title: true,
+          position: true,
+        },
+      },
+      taskTags: {
+        include: {
+          tag: true,
+        },
+      },
+    },
+  });
+}
+
+export async function moveTaskById(
+  taskId: string,
+  input: {
+    columnKey: ColumnKey;
+    position: number;
+  },
+) {
+  const task = await getOwnedTaskOrNull(taskId);
+
+  if (!task) {
+    return null;
+  }
+
+  const targetColumn = task.board.columns.find((column) => column.key === input.columnKey);
+
+  if (!targetColumn) {
+    throw new Error("Target column not found for board.");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const sourceColumnId = task.columnId;
+    const targetColumnId = targetColumn.id;
+
+    if (sourceColumnId === targetColumnId) {
+      const siblingTasks = await tx.task.findMany({
+        where: {
+          boardId: task.boardId,
+          columnId: sourceColumnId,
+          id: {
+            not: task.id,
+          },
+        },
+        orderBy: {
+          position: "asc",
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      const reorderedIds = siblingTasks.map((item) => item.id);
+      const targetPosition = clampPosition(input.position, reorderedIds.length);
+
+      reorderedIds.splice(targetPosition, 0, task.id);
+
+      for (let index = 0; index < reorderedIds.length; index += 1) {
+        await tx.task.update({
+          where: {
+            id: reorderedIds[index],
+          },
+          data: {
+            position: index,
+          },
+        });
+      }
+    } else {
+      const sourceTasks = await tx.task.findMany({
+        where: {
+          boardId: task.boardId,
+          columnId: sourceColumnId,
+          id: {
+            not: task.id,
+          },
+        },
+        orderBy: {
+          position: "asc",
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      for (let index = 0; index < sourceTasks.length; index += 1) {
+        await tx.task.update({
+          where: {
+            id: sourceTasks[index].id,
+          },
+          data: {
+            position: index,
+          },
+        });
+      }
+
+      const targetTasks = await tx.task.findMany({
+        where: {
+          boardId: task.boardId,
+          columnId: targetColumnId,
+          id: {
+            not: task.id,
+          },
+        },
+        orderBy: {
+          position: "asc",
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      const targetIds = targetTasks.map((item) => item.id);
+      const targetPosition = clampPosition(input.position, targetIds.length);
+
+      targetIds.splice(targetPosition, 0, task.id);
+
+      for (let index = 0; index < targetIds.length; index += 1) {
+        const currentId = targetIds[index];
+
+        if (currentId === task.id) {
+          await tx.task.update({
+            where: {
+              id: currentId,
+            },
+            data: {
+              columnId: targetColumnId,
+              position: index,
+            },
+          });
+        } else {
+          await tx.task.update({
+            where: {
+              id: currentId,
+            },
+            data: {
+              position: index,
+            },
+          });
+        }
+      }
+    }
+
+    return tx.task.findUniqueOrThrow({
+      where: {
+        id: task.id,
+      },
+      include: {
+        board: {
+          select: {
+            id: true,
+            title: true,
+          },
+        },
+        column: {
+          select: {
+            id: true,
+            key: true,
+            title: true,
+            position: true,
+          },
+        },
+        taskTags: {
+          include: {
+            tag: true,
+          },
+        },
+      },
+    });
+  });
 }
