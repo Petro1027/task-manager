@@ -1,4 +1,4 @@
-import { Prisma, TaskPriority } from "@prisma/client";
+import { ColumnKey, Prisma, TaskPriority } from "@prisma/client";
 import prisma from "../../lib/prisma";
 
 const DEMO_USER_EMAIL = "demo@example.com";
@@ -15,6 +15,27 @@ async function getDemoUserOrThrow() {
   }
 
   return user;
+}
+
+async function getOwnedTaskOrNull(taskId: string) {
+  const user = await getDemoUserOrThrow();
+
+  return prisma.task.findFirst({
+    where: {
+      id: taskId,
+      board: {
+        ownerId: user.id,
+      },
+    },
+    include: {
+      board: {
+        include: {
+          columns: true,
+        },
+      },
+      column: true,
+    },
+  });
 }
 
 export async function createTaskForBoard(input: {
@@ -125,4 +146,125 @@ export async function getTaskById(taskId: string) {
       },
     },
   });
+}
+
+export async function updateTaskById(
+  taskId: string,
+  input: {
+    title?: string;
+    description?: string | null;
+    priority?: TaskPriority;
+    category?: string | null;
+    dueDate?: string | null;
+    columnKey?: ColumnKey;
+  },
+) {
+  const task = await getOwnedTaskOrNull(taskId);
+
+  if (!task) {
+    return null;
+  }
+
+  let nextColumnId = task.columnId;
+  let nextPosition = task.position;
+
+  if (input.columnKey && input.columnKey !== task.column.key) {
+    const targetColumn = task.board.columns.find((column) => column.key === input.columnKey);
+
+    if (!targetColumn) {
+      throw new Error("Target column not found for board.");
+    }
+
+    nextColumnId = targetColumn.id;
+
+    const lastTaskInTargetColumn = await prisma.task.findFirst({
+      where: {
+        boardId: task.boardId,
+        columnId: targetColumn.id,
+      },
+      orderBy: {
+        position: "desc",
+      },
+    });
+
+    nextPosition = lastTaskInTargetColumn ? lastTaskInTargetColumn.position + 1 : 0;
+  }
+
+  const data: Prisma.TaskUpdateInput = {};
+
+  if (input.title !== undefined) {
+    data.title = input.title;
+  }
+
+  if (input.description !== undefined) {
+    data.description = input.description;
+  }
+
+  if (input.priority !== undefined) {
+    data.priority = input.priority;
+  }
+
+  if (input.category !== undefined) {
+    data.category = input.category;
+  }
+
+  if (input.dueDate !== undefined) {
+    data.dueDate = input.dueDate ? new Date(input.dueDate) : null;
+  }
+
+  if (input.columnKey !== undefined) {
+    data.column = {
+      connect: {
+        id: nextColumnId,
+      },
+    };
+    data.position = nextPosition;
+  }
+
+  return prisma.task.update({
+    where: {
+      id: task.id,
+    },
+    data,
+    include: {
+      board: {
+        select: {
+          id: true,
+          title: true,
+        },
+      },
+      column: {
+        select: {
+          id: true,
+          key: true,
+          title: true,
+          position: true,
+        },
+      },
+      taskTags: {
+        include: {
+          tag: true,
+        },
+      },
+    },
+  });
+}
+
+export async function deleteTaskById(taskId: string) {
+  const task = await getOwnedTaskOrNull(taskId);
+
+  if (!task) {
+    return null;
+  }
+
+  await prisma.task.delete({
+    where: {
+      id: task.id,
+    },
+  });
+
+  return {
+    id: task.id,
+    message: "Task deleted successfully.",
+  };
 }

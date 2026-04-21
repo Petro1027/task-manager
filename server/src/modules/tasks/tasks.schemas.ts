@@ -14,5 +14,24 @@ export const createTaskBodySchema = z.object({
   columnKey: z.nativeEnum(ColumnKey),
 });
 
+export const updateTaskBodySchema = z
+  .object({
+    title: z.string().trim().min(1, "Title is required").max(200, "Title is too long").optional(),
+    description: z
+      .string()
+      .trim()
+      .max(5000, "Description is too long")
+      .nullable()
+      .optional(),
+    priority: z.nativeEnum(TaskPriority).optional(),
+    category: z.string().trim().max(100, "Category is too long").nullable().optional(),
+    dueDate: z.string().datetime().nullable().optional(),
+    columnKey: z.nativeEnum(ColumnKey).optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: "At least one field must be provided.",
+  });
+
 export type CreateTaskBody = z.infer<typeof createTaskBodySchema>;
+export type UpdateTaskBody = z.infer<typeof updateTaskBodySchema>;
 export type TaskParams = z.infer<typeof taskParamsSchema>;
