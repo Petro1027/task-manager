@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import prisma from "../../lib/prisma";
+import { createAccessToken } from "./auth.utils";
 
 export async function registerUser(input: {
   name: string;
@@ -39,5 +40,50 @@ export async function registerUser(input: {
   return {
     ok: true as const,
     user,
+  };
+}
+
+export async function loginUser(input: {
+  email: string;
+  password: string;
+}) {
+  const user = await prisma.user.findUnique({
+    where: {
+      email: input.email,
+    },
+  });
+
+  if (!user) {
+    return {
+      ok: false as const,
+      reason: "INVALID_CREDENTIALS" as const,
+    };
+  }
+
+  const passwordMatches = await bcrypt.compare(input.password, user.passwordHash);
+
+  if (!passwordMatches) {
+    return {
+      ok: false as const,
+      reason: "INVALID_CREDENTIALS" as const,
+    };
+  }
+
+  const accessToken = createAccessToken({
+    userId: user.id,
+    email: user.email,
+    name: user.name,
+  });
+
+  return {
+    ok: true as const,
+    accessToken,
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    },
   };
 }

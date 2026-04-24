@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { ZodError } from "zod";
-import { registerBodySchema } from "./auth.schemas";
-import { registerUser } from "./auth.service";
+import { loginBodySchema, registerBodySchema } from "./auth.schemas";
+import { loginUser, registerUser } from "./auth.service";
 
 const router = Router();
 
@@ -24,6 +24,40 @@ router.post("/register", async (request, response, next) => {
 
     response.status(201).json({
       message: "Registration successful.",
+      user: result.user,
+    });
+  } catch (error) {
+    if (error instanceof ZodError) {
+      response.status(400).json({
+        message: "Invalid request body.",
+        errors: error.flatten(),
+      });
+      return;
+    }
+
+    next(error);
+  }
+});
+
+router.post("/login", async (request, response, next) => {
+  try {
+    const body = loginBodySchema.parse(request.body);
+
+    const result = await loginUser({
+      email: body.email,
+      password: body.password,
+    });
+
+    if (!result.ok) {
+      response.status(401).json({
+        message: "Invalid email or password.",
+      });
+      return;
+    }
+
+    response.status(200).json({
+      message: "Login successful.",
+      accessToken: result.accessToken,
       user: result.user,
     });
   } catch (error) {
