@@ -1,5 +1,11 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import {
+  DndContext,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
@@ -167,6 +173,42 @@ async function createTaskRequest(input: { boardId: string; values: CreateTaskVal
   return (await response.json()) as BoardTask;
 }
 
+async function moveTaskRequest(input: {
+  taskId: string;
+  columnKey: "TODO" | "IN_PROGRESS" | "DONE";
+  position: number;
+}) {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error("Hiányzik a hozzáférési token.");
+  }
+
+  const response = await fetch(apiUrl(`/api/tasks/${input.taskId}/move`), {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      columnKey: input.columnKey,
+      position: input.position,
+    }),
+  });
+
+  if (response.status === 401) {
+    throw new Error("A munkamenet lejárt vagy érvénytelen. Jelentkezz be újra.");
+  }
+
+  if (!response.ok) {
+    const errorData = (await response.json()) as { message?: string };
+
+    throw new Error(errorData.message || "Nem sikerült menteni a task mozgatását.");
+  }
+
+  return (await response.json()) as BoardTask;
+}
+
 function normalizeColumnTasks(
   tasks: BoardTask[],
   column: BoardDetail["columns"][number],
@@ -285,6 +327,26 @@ function BoardDetailPage() {
     },
   });
 
+  const moveTaskMutation = useMutation({
+    mutationFn: moveTaskRequest,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["board-detail", authUser?.id, boardId],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["boards", authUser?.id],
+      });
+    },
+    onError: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["board-detail", authUser?.id, boardId],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["boards", authUser?.id],
+      });
+    },
+  });
+
   useEffect(() => {
     if (!boardQuery.data) {
       return;
@@ -317,16 +379,61 @@ function BoardDetailPage() {
     const activeId = String(active.id);
     const overType = over.data.current?.type as string | undefined;
 
-    setTasksByColumn((previous) => {
-      const source = findTaskLocation(activeId, previous);
+    const source = findTaskLocation(activeId, tasksByColumn);
 
-      if (!source) {
-        return previous;
+    if (!source) {
+      return;
+    }
+
+    const sourceColumn = sortedColumns.find((column) => column.id === source.columnId);
+
+    if (!sourceColumn) {
+      return;
+    }
+
+    let targetColumnId: string | null = null;
+    let targetPosition = 0;
+
+    if (overType === "task") {
+      const target = findTaskLocation(String(over.id), tasksByColumn);
+
+      if (!target) {
+        return;
       }
 
-      const sourceColumn = sortedColumns.find((column) => column.id === source.columnId);
+      if (source.columnId === target.columnId && source.index === target.index) {
+        return;
+      }
 
-      if (!sourceColumn) {
+      targetColumnId = target.columnId;
+      targetPosition = target.index;
+    } else if (overType === "column") {
+      const dropColumnId = over.data.current?.columnId as string | undefined;
+
+      if (!dropColumnId) {
+        return;
+      }
+
+      if (dropColumnId === source.columnId) {
+        return;
+      }
+
+      targetColumnId = dropColumnId;
+      targetPosition = tasksByColumn[dropColumnId]?.length ?? 0;
+    } else {
+      return;
+    }
+
+    const targetColumn = sortedColumns.find((column) => column.id === targetColumnId);
+
+    if (!targetColumn) {
+      return;
+    }
+
+    setTasksByColumn((previous) => {
+      const latestSource = findTaskLocation(activeId, previous);
+
+      if (!latestSource) {
         return previous;
       }
 
@@ -334,66 +441,38 @@ function BoardDetailPage() {
         Object.entries(previous).map(([columnId, tasks]) => [columnId, [...tasks]]),
       );
 
-      if (overType === "task") {
-        const target = findTaskLocation(String(over.id), next);
-
-        if (!target) {
-          return previous;
-        }
-
-        if (source.columnId === target.columnId) {
-          if (source.index === target.index) {
-            return previous;
-          }
-
-          next[source.columnId] = normalizeColumnTasks(
-            arrayMove(next[source.columnId], source.index, target.index),
-            sourceColumn,
-          );
-
-          return next;
-        }
-
-        const targetColumn = sortedColumns.find((column) => column.id === target.columnId);
-
-        if (!targetColumn) {
-          return previous;
-        }
-
-        const [movedTask] = next[source.columnId].splice(source.index, 1);
-
-        next[source.columnId] = normalizeColumnTasks(next[source.columnId], sourceColumn);
-
-        next[target.columnId].splice(target.index, 0, movedTask);
-        next[target.columnId] = normalizeColumnTasks(next[target.columnId], targetColumn);
+      if (latestSource.columnId === targetColumnId) {
+        next[latestSource.columnId] = normalizeColumnTasks(
+          arrayMove(next[latestSource.columnId], latestSource.index, targetPosition),
+          sourceColumn,
+        );
 
         return next;
       }
 
-      if (overType === "column") {
-        const targetColumnId = over.data.current?.columnId as string | undefined;
+      const latestTargetColumn = sortedColumns.find((column) => column.id === targetColumnId);
 
-        if (!targetColumnId || targetColumnId === source.columnId) {
-          return previous;
-        }
-
-        const targetColumn = sortedColumns.find((column) => column.id === targetColumnId);
-
-        if (!targetColumn) {
-          return previous;
-        }
-
-        const [movedTask] = next[source.columnId].splice(source.index, 1);
-
-        next[source.columnId] = normalizeColumnTasks(next[source.columnId], sourceColumn);
-
-        next[targetColumnId].push(movedTask);
-        next[targetColumnId] = normalizeColumnTasks(next[targetColumnId], targetColumn);
-
-        return next;
+      if (!latestTargetColumn) {
+        return previous;
       }
 
-      return previous;
+      const [movedTask] = next[latestSource.columnId].splice(latestSource.index, 1);
+
+      next[latestSource.columnId] = normalizeColumnTasks(
+        next[latestSource.columnId],
+        sourceColumn,
+      );
+
+      next[targetColumnId].splice(targetPosition, 0, movedTask);
+      next[targetColumnId] = normalizeColumnTasks(next[targetColumnId], latestTargetColumn);
+
+      return next;
+    });
+
+    moveTaskMutation.mutate({
+      taskId: activeId,
+      columnKey: targetColumn.key,
+      position: targetPosition,
     });
   };
 
@@ -483,8 +562,8 @@ function BoardDetailPage() {
                 <h1 className="mt-4 text-4xl font-semibold tracking-tight">{board.title}</h1>
 
                 <p className="mt-3 max-w-3xl text-[rgba(255,255,255,0.72)]">
-                  A task kártyák most már húzhatók. Ebben a lépésben a mozgatás még
-                  frontend oldali, a következő lépésben mentjük adatbázisba is.
+                  A task kártyák most már húzhatók és a mozgatás mentődik is az
+                  adatbázisba.
                 </p>
               </div>
 
@@ -612,6 +691,12 @@ function BoardDetailPage() {
               </div>
             )}
           </section>
+
+          {moveTaskMutation.isError && (
+            <div className="rounded-3xl border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-300">
+              {moveTaskMutation.error.message}
+            </div>
+          )}
 
           <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
             <section className="grid gap-6 lg:grid-cols-3">
