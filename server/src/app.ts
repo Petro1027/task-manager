@@ -1,6 +1,7 @@
 import cors from "cors";
 import express from "express";
 import { env } from "./config/env";
+import authRoutes from "./modules/auth/auth.routes";
 import boardsRoutes from "./modules/boards/boards.routes";
 import tasksRoutes from "./modules/tasks/tasks.routes";
 
@@ -26,6 +27,7 @@ app.get("/api/health", (_request, response) => {
   });
 });
 
+app.use("/api/auth", authRoutes);
 app.use("/api/boards", boardsRoutes);
 app.use("/api/tasks", tasksRoutes);
 
