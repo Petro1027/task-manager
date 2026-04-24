@@ -1,8 +1,10 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { z } from "zod";
+import TaskDetailsModal from "../components/tasks/TaskDetailsModal";
 import { useAuth } from "../app/auth-context";
 import { apiUrl } from "../lib/api";
 import { getAccessToken } from "../lib/auth";
@@ -176,6 +178,7 @@ function BoardDetailPage() {
   const { boardId } = useParams<{ boardId: string }>();
   const { authUser, isAuthReady } = useAuth();
   const queryClient = useQueryClient();
+  const [selectedTask, setSelectedTask] = useState<BoardTask | null>(null);
 
   const {
     register,
@@ -287,252 +290,261 @@ function BoardDetailPage() {
   const activeTasks = tasks.filter((task) => !task.archived);
 
   return (
-    <div className="min-h-screen bg-[#242424] px-4 py-12 text-[rgba(255,255,255,0.87)]">
-      <main className="mx-auto flex w-full max-w-7xl flex-col gap-8">
-        <div className="rounded-3xl border border-[rgba(100,108,255,0.25)] bg-[#1a1a1a] p-8 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <Link
-                to="/boards"
-                className="text-sm text-[#646cff] transition hover:text-[#535bf2]"
-              >
-                ← Vissza a boardokhoz
-              </Link>
-
-              <h1 className="mt-4 text-4xl font-semibold tracking-tight">{board.title}</h1>
-
-              <p className="mt-3 max-w-3xl text-[rgba(255,255,255,0.72)]">
-                Ez a board részlet oldal a backend
-                <code className="mx-1 rounded bg-[#242424] px-2 py-1 text-sm text-[#646cff]">
-                  GET /api/boards/:boardId
-                </code>
-                és
-                <code className="mx-1 rounded bg-[#242424] px-2 py-1 text-sm text-[#646cff]">
-                  GET /api/boards/:boardId/tasks
-                </code>
-                endpointjait használja.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-2xl bg-[#242424] p-4">
-                <p className="text-xs uppercase tracking-[0.2em] text-[rgba(255,255,255,0.5)]">
-                  Taskok
-                </p>
-                <p className="mt-2 text-2xl font-semibold">{board._count.tasks}</p>
-              </div>
-
-              <div className="rounded-2xl bg-[#242424] p-4">
-                <p className="text-xs uppercase tracking-[0.2em] text-[rgba(255,255,255,0.5)]">
-                  Tagek
-                </p>
-                <p className="mt-2 text-2xl font-semibold">{board._count.tags}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <section className="rounded-3xl border border-[rgba(100,108,255,0.2)] bg-[#1a1a1a] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
-          <h2 className="text-2xl font-semibold">Új task létrehozása</h2>
-          <p className="mt-2 text-[rgba(255,255,255,0.72)]">
-            Itt közvetlenül a boardon belül tudsz új taskot létrehozni.
-          </p>
-
-          <form
-            onSubmit={handleSubmit((values) => createTaskMutation.mutate(values))}
-            className="mt-6 grid gap-4 md:grid-cols-2"
-          >
-            <div className="md:col-span-2">
-              <label className="mb-2 block text-sm font-medium text-[rgba(255,255,255,0.82)]">
-                Cím
-              </label>
-              <input
-                type="text"
-                {...register("title")}
-                className="w-full rounded-xl border border-[rgba(100,108,255,0.25)] bg-[#242424] px-4 py-3 outline-none transition focus:border-[#646cff]"
-                placeholder="Például: API dokumentáció frissítése"
-              />
-              {errors.title && (
-                <p className="mt-2 text-sm text-red-400">{errors.title.message}</p>
-              )}
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="mb-2 block text-sm font-medium text-[rgba(255,255,255,0.82)]">
-                Leírás
-              </label>
-              <textarea
-                {...register("description")}
-                rows={4}
-                className="w-full rounded-xl border border-[rgba(100,108,255,0.25)] bg-[#242424] px-4 py-3 outline-none transition focus:border-[#646cff]"
-                placeholder="Rövid leírás a taskhoz"
-              />
-              {errors.description && (
-                <p className="mt-2 text-sm text-red-400">{errors.description.message}</p>
-              )}
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-[rgba(255,255,255,0.82)]">
-                Prioritás
-              </label>
-              <select
-                {...register("priority")}
-                className="w-full rounded-xl border border-[rgba(100,108,255,0.25)] bg-[#242424] px-4 py-3 outline-none transition focus:border-[#646cff]"
-              >
-                <option value="LOW">LOW</option>
-                <option value="MEDIUM">MEDIUM</option>
-                <option value="HIGH">HIGH</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-[rgba(255,255,255,0.82)]">
-                Oszlop
-              </label>
-              <select
-                {...register("columnKey")}
-                className="w-full rounded-xl border border-[rgba(100,108,255,0.25)] bg-[#242424] px-4 py-3 outline-none transition focus:border-[#646cff]"
-              >
-                <option value="TODO">To Do</option>
-                <option value="IN_PROGRESS">In Progress</option>
-                <option value="DONE">Done</option>
-              </select>
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="mb-2 block text-sm font-medium text-[rgba(255,255,255,0.82)]">
-                Kategória
-              </label>
-              <input
-                type="text"
-                {...register("category")}
-                className="w-full rounded-xl border border-[rgba(100,108,255,0.25)] bg-[#242424] px-4 py-3 outline-none transition focus:border-[#646cff]"
-                placeholder="Például: Backend"
-              />
-              {errors.category && (
-                <p className="mt-2 text-sm text-red-400">{errors.category.message}</p>
-              )}
-            </div>
-
-            <div className="md:col-span-2">
-              <button
-                type="submit"
-                disabled={createTaskMutation.isPending}
-                className="rounded-xl bg-[#646cff] px-5 py-3 font-medium text-white transition hover:bg-[#535bf2] disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {createTaskMutation.isPending ? "Létrehozás..." : "Task létrehozása"}
-              </button>
-            </div>
-          </form>
-
-          {createTaskMutation.isError && (
-            <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-              {createTaskMutation.error.message}
-            </div>
-          )}
-
-          {createTaskMutation.isSuccess && (
-            <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
-              A task sikeresen létrejött.
-            </div>
-          )}
-        </section>
-
-        <section className="rounded-3xl border border-[rgba(100,108,255,0.2)] bg-[#1a1a1a] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
-          <h2 className="text-2xl font-semibold">Oszlopok</h2>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {board.columns.map((column) => (
-              <span
-                key={column.id}
-                className="rounded-full border border-[rgba(100,108,255,0.2)] bg-[#242424] px-3 py-2 text-sm text-[rgba(255,255,255,0.78)]"
-              >
-                {column.title}
-              </span>
-            ))}
-          </div>
-        </section>
-
-        <section className="grid gap-6 lg:grid-cols-3">
-          {board.columns
-            .slice()
-            .sort((a, b) => a.position - b.position)
-            .map((column) => {
-              const columnTasks = activeTasks
-                .filter((task) => task.columnId === column.id)
-                .sort((a, b) => a.position - b.position);
-
-              return (
-                <div
-                  key={column.id}
-                  className="rounded-3xl border border-[rgba(100,108,255,0.2)] bg-[#1a1a1a] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.2)]"
+    <>
+      <div className="min-h-screen bg-[#242424] px-4 py-12 text-[rgba(255,255,255,0.87)]">
+        <main className="mx-auto flex w-full max-w-7xl flex-col gap-8">
+          <div className="rounded-3xl border border-[rgba(100,108,255,0.25)] bg-[#1a1a1a] p-8 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <Link
+                  to="/boards"
+                  className="text-sm text-[#646cff] transition hover:text-[#535bf2]"
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <h2 className="text-xl font-semibold">{column.title}</h2>
-                    <span className="rounded-full border border-[rgba(100,108,255,0.2)] px-3 py-1 text-xs text-[rgba(255,255,255,0.72)]">
-                      {columnTasks.length} task
-                    </span>
-                  </div>
+                  ← Vissza a boardokhoz
+                </Link>
 
-                  <div className="mt-5 flex flex-col gap-4">
-                    {columnTasks.length === 0 ? (
-                      <div className="rounded-2xl border border-dashed border-[rgba(100,108,255,0.2)] bg-[#242424] p-4 text-sm text-[rgba(255,255,255,0.6)]">
-                        Nincs task ebben az oszlopban.
-                      </div>
-                    ) : (
-                      columnTasks.map((task) => (
-                        <article
-                          key={task.id}
-                          className="rounded-2xl border border-[rgba(100,108,255,0.18)] bg-[#242424] p-4"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <h3 className="text-lg font-medium">{task.title}</h3>
-                            <span
-                              className={`rounded-full border px-3 py-1 text-xs font-medium ${priorityBadgeClasses(task.priority)}`}
-                            >
-                              {task.priority}
-                            </span>
-                          </div>
+                <h1 className="mt-4 text-4xl font-semibold tracking-tight">{board.title}</h1>
 
-                          {task.description && (
-                            <p className="mt-3 text-sm leading-6 text-[rgba(255,255,255,0.72)]">
-                              {task.description}
-                            </p>
-                          )}
+                <p className="mt-3 max-w-3xl text-[rgba(255,255,255,0.72)]">
+                  Ez a board részlet oldal a backend
+                  <code className="mx-1 rounded bg-[#242424] px-2 py-1 text-sm text-[#646cff]">
+                    GET /api/boards/:boardId
+                  </code>
+                  és
+                  <code className="mx-1 rounded bg-[#242424] px-2 py-1 text-sm text-[#646cff]">
+                    GET /api/boards/:boardId/tasks
+                  </code>
+                  endpointjait használja.
+                </p>
+              </div>
 
-                          <div className="mt-4 flex flex-wrap gap-2">
-                            {task.category && (
-                              <span className="rounded-full border border-[rgba(100,108,255,0.2)] px-3 py-1 text-xs text-[rgba(255,255,255,0.72)]">
-                                {task.category}
-                              </span>
-                            )}
-
-                            {task.dueDate && (
-                              <span className="rounded-full border border-[rgba(100,108,255,0.2)] px-3 py-1 text-xs text-[rgba(255,255,255,0.72)]">
-                                Határidő: {new Date(task.dueDate).toLocaleDateString("hu-HU")}
-                              </span>
-                            )}
-
-                            {task.taskTags.map((taskTag) => (
-                              <span
-                                key={taskTag.tag.id}
-                                className="rounded-full px-3 py-1 text-xs text-white"
-                                style={{ backgroundColor: taskTag.tag.color }}
-                              >
-                                {taskTag.tag.name}
-                              </span>
-                            ))}
-                          </div>
-                        </article>
-                      ))
-                    )}
-                  </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-2xl bg-[#242424] p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-[rgba(255,255,255,0.5)]">
+                    Taskok
+                  </p>
+                  <p className="mt-2 text-2xl font-semibold">{board._count.tasks}</p>
                 </div>
-              );
-            })}
-        </section>
-      </main>
-    </div>
+
+                <div className="rounded-2xl bg-[#242424] p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-[rgba(255,255,255,0.5)]">
+                    Tagek
+                  </p>
+                  <p className="mt-2 text-2xl font-semibold">{board._count.tags}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <section className="rounded-3xl border border-[rgba(100,108,255,0.2)] bg-[#1a1a1a] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
+            <h2 className="text-2xl font-semibold">Új task létrehozása</h2>
+            <p className="mt-2 text-[rgba(255,255,255,0.72)]">
+              Itt közvetlenül a boardon belül tudsz új taskot létrehozni.
+            </p>
+
+            <form
+              onSubmit={handleSubmit((values) => createTaskMutation.mutate(values))}
+              className="mt-6 grid gap-4 md:grid-cols-2"
+            >
+              <div className="md:col-span-2">
+                <label className="mb-2 block text-sm font-medium text-[rgba(255,255,255,0.82)]">
+                  Cím
+                </label>
+                <input
+                  type="text"
+                  {...register("title")}
+                  className="w-full rounded-xl border border-[rgba(100,108,255,0.25)] bg-[#242424] px-4 py-3 outline-none transition focus:border-[#646cff]"
+                  placeholder="Például: API dokumentáció frissítése"
+                />
+                {errors.title && (
+                  <p className="mt-2 text-sm text-red-400">{errors.title.message}</p>
+                )}
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="mb-2 block text-sm font-medium text-[rgba(255,255,255,0.82)]">
+                  Leírás
+                </label>
+                <textarea
+                  {...register("description")}
+                  rows={4}
+                  className="w-full rounded-xl border border-[rgba(100,108,255,0.25)] bg-[#242424] px-4 py-3 outline-none transition focus:border-[#646cff]"
+                  placeholder="Rövid leírás a taskhoz"
+                />
+                {errors.description && (
+                  <p className="mt-2 text-sm text-red-400">{errors.description.message}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-[rgba(255,255,255,0.82)]">
+                  Prioritás
+                </label>
+                <select
+                  {...register("priority")}
+                  className="w-full rounded-xl border border-[rgba(100,108,255,0.25)] bg-[#242424] px-4 py-3 outline-none transition focus:border-[#646cff]"
+                >
+                  <option value="LOW">LOW</option>
+                  <option value="MEDIUM">MEDIUM</option>
+                  <option value="HIGH">HIGH</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-[rgba(255,255,255,0.82)]">
+                  Oszlop
+                </label>
+                <select
+                  {...register("columnKey")}
+                  className="w-full rounded-xl border border-[rgba(100,108,255,0.25)] bg-[#242424] px-4 py-3 outline-none transition focus:border-[#646cff]"
+                >
+                  <option value="TODO">To Do</option>
+                  <option value="IN_PROGRESS">In Progress</option>
+                  <option value="DONE">Done</option>
+                </select>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="mb-2 block text-sm font-medium text-[rgba(255,255,255,0.82)]">
+                  Kategória
+                </label>
+                <input
+                  type="text"
+                  {...register("category")}
+                  className="w-full rounded-xl border border-[rgba(100,108,255,0.25)] bg-[#242424] px-4 py-3 outline-none transition focus:border-[#646cff]"
+                  placeholder="Például: Backend"
+                />
+                {errors.category && (
+                  <p className="mt-2 text-sm text-red-400">{errors.category.message}</p>
+                )}
+              </div>
+
+              <div className="md:col-span-2">
+                <button
+                  type="submit"
+                  disabled={createTaskMutation.isPending}
+                  className="rounded-xl bg-[#646cff] px-5 py-3 font-medium text-white transition hover:bg-[#535bf2] disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {createTaskMutation.isPending ? "Létrehozás..." : "Task létrehozása"}
+                </button>
+              </div>
+            </form>
+
+            {createTaskMutation.isError && (
+              <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                {createTaskMutation.error.message}
+              </div>
+            )}
+
+            {createTaskMutation.isSuccess && (
+              <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+                A task sikeresen létrejött.
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-3xl border border-[rgba(100,108,255,0.2)] bg-[#1a1a1a] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
+            <h2 className="text-2xl font-semibold">Oszlopok</h2>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {board.columns.map((column) => (
+                <span
+                  key={column.id}
+                  className="rounded-full border border-[rgba(100,108,255,0.2)] bg-[#242424] px-3 py-2 text-sm text-[rgba(255,255,255,0.78)]"
+                >
+                  {column.title}
+                </span>
+              ))}
+            </div>
+          </section>
+
+          <section className="grid gap-6 lg:grid-cols-3">
+            {board.columns
+              .slice()
+              .sort((a, b) => a.position - b.position)
+              .map((column) => {
+                const columnTasks = activeTasks
+                  .filter((task) => task.columnId === column.id)
+                  .sort((a, b) => a.position - b.position);
+
+                return (
+                  <div
+                    key={column.id}
+                    className="rounded-3xl border border-[rgba(100,108,255,0.2)] bg-[#1a1a1a] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.2)]"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <h2 className="text-xl font-semibold">{column.title}</h2>
+                      <span className="rounded-full border border-[rgba(100,108,255,0.2)] px-3 py-1 text-xs text-[rgba(255,255,255,0.72)]">
+                        {columnTasks.length} task
+                      </span>
+                    </div>
+
+                    <div className="mt-5 flex flex-col gap-4">
+                      {columnTasks.length === 0 ? (
+                        <div className="rounded-2xl border border-dashed border-[rgba(100,108,255,0.2)] bg-[#242424] p-4 text-sm text-[rgba(255,255,255,0.6)]">
+                          Nincs task ebben az oszlopban.
+                        </div>
+                      ) : (
+                        columnTasks.map((task) => (
+                          <button
+                            key={task.id}
+                            type="button"
+                            onClick={() => setSelectedTask(task)}
+                            className="rounded-2xl border border-[rgba(100,108,255,0.18)] bg-[#242424] p-4 text-left transition hover:border-[rgba(100,108,255,0.35)] hover:bg-[#2a2a2a]"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <h3 className="text-lg font-medium">{task.title}</h3>
+                              <span
+                                className={`rounded-full border px-3 py-1 text-xs font-medium ${priorityBadgeClasses(task.priority)}`}
+                              >
+                                {task.priority}
+                              </span>
+                            </div>
+
+                            {task.description && (
+                              <p className="mt-3 text-sm leading-6 text-[rgba(255,255,255,0.72)]">
+                                {task.description}
+                              </p>
+                            )}
+
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              {task.category && (
+                                <span className="rounded-full border border-[rgba(100,108,255,0.2)] px-3 py-1 text-xs text-[rgba(255,255,255,0.72)]">
+                                  {task.category}
+                                </span>
+                              )}
+
+                              {task.dueDate && (
+                                <span className="rounded-full border border-[rgba(100,108,255,0.2)] px-3 py-1 text-xs text-[rgba(255,255,255,0.72)]">
+                                  Határidő: {new Date(task.dueDate).toLocaleDateString("hu-HU")}
+                                </span>
+                              )}
+
+                              {task.taskTags.map((taskTag) => (
+                                <span
+                                  key={taskTag.tag.id}
+                                  className="rounded-full px-3 py-1 text-xs text-white"
+                                  style={{ backgroundColor: taskTag.tag.color }}
+                                >
+                                  {taskTag.tag.name}
+                                </span>
+                              ))}
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+          </section>
+        </main>
+      </div>
+
+      <TaskDetailsModal
+        task={selectedTask}
+        onClose={() => setSelectedTask(null)}
+      />
+    </>
   );
 }
 
