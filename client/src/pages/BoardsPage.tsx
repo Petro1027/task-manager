@@ -55,10 +55,13 @@ async function fetchBoards() {
   }
 
   if (!response.ok) {
-    throw new Error("Nem sikerült betölteni a boardokat.");
+    const errorData = (await response.json()) as { message?: string };
+
+    throw new Error(errorData.message || "Nem sikerült betölteni a boardokat.");
   }
 
-  return (await response.json()) as BoardListItem[];
+  const successData = (await response.json()) as BoardListItem[];
+  return successData;
 }
 
 async function createBoardRequest(values: CreateBoardValues) {
@@ -77,21 +80,18 @@ async function createBoardRequest(values: CreateBoardValues) {
     body: JSON.stringify(values),
   });
 
-  const data = (await response.json()) as
-    | BoardListItem
-    | {
-    message?: string;
-  };
-
   if (response.status === 401) {
     throw new Error("A munkamenet lejárt vagy érvénytelen. Jelentkezz be újra.");
   }
 
   if (!response.ok) {
-    throw new Error(data.message || "Nem sikerült létrehozni a boardot.");
+    const errorData = (await response.json()) as { message?: string };
+
+    throw new Error(errorData.message || "Nem sikerült létrehozni a boardot.");
   }
 
-  return data as BoardListItem;
+  const successData = (await response.json()) as BoardListItem;
+  return successData;
 }
 
 function BoardsPage() {
@@ -323,6 +323,13 @@ function BoardsPage() {
                     ))}
                   </div>
                 </div>
+
+                <Link
+                  to={`/boards/${board.id}`}
+                  className="mt-6 inline-flex rounded-xl bg-[#646cff] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#535bf2]"
+                >
+                  Megnyitás
+                </Link>
               </article>
             ))}
           </div>
