@@ -39,13 +39,22 @@ function HomePage() {
               <h2 className="mt-2 text-2xl font-semibold">{authUser.name}</h2>
               <p className="mt-1 text-[rgba(255,255,255,0.72)]">{authUser.email}</p>
 
-              <button
-                type="button"
-                onClick={logout}
-                className="mt-4 rounded-xl border border-emerald-500/30 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:bg-emerald-500/10"
-              >
-                Helyi kijelentkezés
-              </button>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <Link
+                  to="/boards"
+                  className="rounded-xl bg-[#646cff] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#535bf2]"
+                >
+                  Saját boardok
+                </Link>
+
+                <button
+                  type="button"
+                  onClick={logout}
+                  className="rounded-xl border border-emerald-500/30 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:bg-emerald-500/10"
+                >
+                  Helyi kijelentkezés
+                </button>
+              </div>
             </div>
           ) : (
             <div className="mt-8 flex flex-wrap gap-4">
@@ -72,18 +81,18 @@ function HomePage() {
             <ul className="mt-4 list-disc space-y-2 pl-5 text-[rgba(255,255,255,0.72)] marker:text-[#646cff]">
               <li>Session visszaállítás</li>
               <li>GET /api/auth/me használat</li>
+              <li>Board lista oldal</li>
               <li>Protected route alap</li>
-              <li>Board UI integráció</li>
             </ul>
           </section>
 
           <section className="rounded-3xl border border-[rgba(100,108,255,0.2)] bg-[#1a1a1a] p-6">
             <h2 className="text-2xl font-semibold">Következő frontend backend kapcsolat</h2>
             <ul className="mt-4 list-disc space-y-2 pl-5 text-[rgba(255,255,255,0.72)] marker:text-[#646cff]">
-              <li>Board lista lekérése</li>
-              <li>Protected route</li>
-              <li>Dashboard / board UI</li>
+              <li>Board létrehozás frontendről</li>
+              <li>Board részlet oldal</li>
               <li>Task kezelés frontendről</li>
+              <li>Kanban UI</li>
             </ul>
           </section>
         </div>
