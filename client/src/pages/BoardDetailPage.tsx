@@ -270,6 +270,16 @@ function findTaskLocation(taskId: string, tasksByColumn: TasksByColumn) {
   return null;
 }
 
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .map((part) => part.trim()[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
 function BoardDetailPage() {
   const { boardId } = useParams<{ boardId: string }>();
   const { authUser, isAuthReady } = useAuth();
@@ -288,7 +298,9 @@ function BoardDetailPage() {
         boardError: "Hiba történt a board betöltése közben.",
         boardNotFound: "A board nem található.",
         back: "Vissza a boardokhoz",
-        overview: "Áttekintés",
+        overviewTitle: "Áttekintés",
+        overviewText:
+          "Itt látod a board fő adatait, az oszlopokat, valamint a taskok és tagek számát.",
         taskCreateTitle: "Új task létrehozása",
         taskCreateText: "Itt közvetlenül a boardon belül tudsz új taskot létrehozni.",
         title: "Cím",
@@ -329,7 +341,9 @@ function BoardDetailPage() {
         boardError: "An error occurred while loading the board.",
         boardNotFound: "Board not found.",
         back: "Back to boards",
-        overview: "Overview",
+        overviewTitle: "Overview",
+        overviewText:
+          "Here you can see the main board information, the columns, and the number of tasks and tags.",
         taskCreateTitle: "Create a new task",
         taskCreateText: "You can create a new task directly inside this board.",
         title: "Title",
@@ -696,114 +710,138 @@ function BoardDetailPage() {
   return (
     <>
       <AppShell>
-        <SurfaceCard>
-          <div className="flex flex-col gap-8 xl:flex-row xl:items-start xl:justify-between">
-            <div className="max-w-3xl">
-              <Link
-                to="/boards"
-                className="text-sm font-medium transition hover:opacity-80"
-                style={{ color: "var(--accent)" }}
-              >
-                ← {copy.back}
-              </Link>
+        <section
+          className="rounded-[32px] border px-6 py-8 shadow-[var(--panel-shadow)] lg:px-10 lg:py-10"
+          style={{
+            borderColor: "var(--panel-border)",
+            background: "var(--surface-2)",
+          }}
+        >
+          <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
+            <div className="min-w-0">
+              <div className="flex flex-col items-start gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                <Link
+                  to="/boards"
+                  className="inline-flex items-center rounded-xl px-3 py-2 text-sm font-medium transition hover:opacity-80"
+                  style={{ color: "var(--accent)" }}
+                >
+                  ← {copy.back}
+                </Link>
 
-              <span
-                className="mt-5 inline-flex rounded-full border px-3 py-1 text-sm font-medium"
-                style={{
-                  borderColor: "var(--panel-border)",
-                  backgroundColor: "var(--accent-soft)",
-                  color: "var(--accent)",
-                }}
-              >
-                {copy.badge}
-              </span>
+                <span
+                  className="inline-flex items-center rounded-full px-4 py-2 text-sm font-semibold"
+                  style={{
+                    background: "var(--accent-soft)",
+                    color: "var(--accent)",
+                    border: "1px solid var(--panel-border)",
+                  }}
+                >
+                  {copy.badge}
+                </span>
+              </div>
 
-              <h1 className="mt-6 text-4xl font-semibold tracking-tight sm:text-5xl">
+              <h1
+                className="mt-6 break-words text-4xl font-semibold tracking-tight sm:text-5xl"
+                style={{ color: "var(--text-primary)" }}
+              >
                 {board.title}
               </h1>
 
               <p
-                className="mt-4 max-w-2xl text-base leading-8 md:text-lg"
+                className="mt-5 max-w-3xl text-lg leading-8"
                 style={{ color: "var(--text-secondary)" }}
               >
                 {copy.dragHint}
               </p>
             </div>
 
-            <div
-              className="w-full max-w-sm rounded-[28px] border p-5"
+            <aside
+              className="w-full rounded-[28px] border p-6"
               style={{
-                background: "var(--surface-2)",
                 borderColor: "var(--panel-border)",
+                background: "rgba(255,255,255,0.02)",
               }}
             >
               <p
-                className="text-xs uppercase tracking-[0.22em]"
+                className="mb-6 text-sm font-semibold uppercase tracking-[0.28em]"
                 style={{ color: "var(--accent)" }}
               >
                 {copy.activeProfile}
               </p>
 
-              <div className="mt-4 flex items-center gap-4">
+              <div className="flex items-center gap-5">
                 <div
-                  className="flex h-14 w-14 items-center justify-center rounded-2xl text-lg font-semibold"
+                  className="flex h-20 w-20 shrink-0 items-center justify-center rounded-[24px] text-4xl font-semibold"
                   style={{
                     background: "var(--accent-soft)",
                     color: "var(--accent)",
                   }}
                 >
-                  {authUser.name
-                    .split(" ")
-                    .map((part) => part[0])
-                    .slice(0, 2)
-                    .join("")
-                    .toUpperCase()}
+                  {getInitials(authUser.name)}
                 </div>
 
-                <div>
-                  <h2 className="text-xl font-semibold">{authUser.name}</h2>
-                  <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+                <div className="min-w-0">
+                  <h2
+                    className="truncate text-2xl font-semibold"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    {authUser.name}
+                  </h2>
+                  <p
+                    className="truncate text-lg"
+                    style={{ color: "var(--text-secondary)" }}
+                  >
                     {authUser.email}
                   </p>
                 </div>
               </div>
 
-              <div className="mt-5 grid grid-cols-2 gap-3">
+              <div className="mt-8 grid grid-cols-2 gap-4">
                 <div
-                  className="rounded-2xl border p-4"
+                  className="rounded-[24px] border p-5"
                   style={{
-                    background: "var(--surface-3)",
                     borderColor: "var(--panel-border)",
+                    background: "var(--surface-1)",
                   }}
                 >
                   <p
-                    className="text-xs uppercase tracking-[0.18em]"
-                    style={{ color: "var(--text-muted)" }}
+                    className="text-sm uppercase tracking-[0.22em]"
+                    style={{ color: "var(--text-secondary)" }}
                   >
                     {copy.tasks}
                   </p>
-                  <p className="mt-2 text-2xl font-semibold">{board._count.tasks}</p>
+                  <p
+                    className="mt-4 text-4xl font-semibold"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    {board._count.tasks}
+                  </p>
                 </div>
 
                 <div
-                  className="rounded-2xl border p-4"
+                  className="rounded-[24px] border p-5"
                   style={{
-                    background: "var(--surface-3)",
                     borderColor: "var(--panel-border)",
+                    background: "var(--surface-1)",
                   }}
                 >
                   <p
-                    className="text-xs uppercase tracking-[0.18em]"
-                    style={{ color: "var(--text-muted)" }}
+                    className="text-sm uppercase tracking-[0.22em]"
+                    style={{ color: "var(--text-secondary)" }}
                   >
                     {copy.tags}
                   </p>
-                  <p className="mt-2 text-2xl font-semibold">{board._count.tags}</p>
+                  <p
+                    className="mt-4 text-4xl font-semibold"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    {board._count.tags}
+                  </p>
                 </div>
               </div>
-            </div>
+            </aside>
           </div>
-        </SurfaceCard>
+        </section>
 
         <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
           <SurfaceCard>
@@ -974,7 +1012,7 @@ function BoardDetailPage() {
           <SurfaceCard>
             <h2 className="text-2xl font-semibold">{copy.boardInfo}</h2>
             <p className="mt-3 text-base leading-7" style={{ color: "var(--text-secondary)" }}>
-              {copy.overview}
+              {copy.overviewText}
             </p>
 
             <div
