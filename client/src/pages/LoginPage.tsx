@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { Link, useNavigate } from "react-router-dom";
 import { z } from "zod";
-import { saveAuthSession } from "../lib/auth";
+import { useAuth } from "../app/auth-context";
 import { API_BASE_URL } from "../lib/api";
 
 const loginFormSchema = z.object({
@@ -31,6 +31,7 @@ type ErrorResponse = {
 
 function LoginPage() {
   const navigate = useNavigate();
+  const { setSession } = useAuth();
   const [serverError, setServerError] = useState<string>("");
 
   const {
@@ -66,7 +67,7 @@ function LoginPage() {
 
       const successData = (await response.json()) as LoginSuccessResponse;
 
-      saveAuthSession({
+      setSession({
         accessToken: successData.accessToken,
         user: successData.user,
       });

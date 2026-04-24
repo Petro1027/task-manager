@@ -1,14 +1,8 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
-import { clearAuthSession, getStoredAuthUser, type AuthUser } from "../lib/auth";
+import { useAuth } from "../app/auth-context";
 
 function HomePage() {
-  const [authUser, setAuthUser] = useState<AuthUser | null>(() => getStoredAuthUser());
-
-  const handleLogout = () => {
-    clearAuthSession();
-    setAuthUser(null);
-  };
+  const { authUser, isAuthReady, logout } = useAuth();
 
   return (
     <div className="min-h-screen bg-[#242424] px-4 py-12 text-[rgba(255,255,255,0.87)]">
@@ -28,7 +22,16 @@ function HomePage() {
             alkalmazást.
           </p>
 
-          {authUser ? (
+          {!isAuthReady ? (
+            <div className="mt-8 rounded-2xl border border-[rgba(100,108,255,0.25)] bg-[#242424] p-5">
+              <p className="text-sm uppercase tracking-[0.2em] text-[#646cff]">
+                Session ellenőrzése
+              </p>
+              <p className="mt-2 text-[rgba(255,255,255,0.72)]">
+                Betöltjük a bejelentkezési állapotot...
+              </p>
+            </div>
+          ) : authUser ? (
             <div className="mt-8 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-5">
               <p className="text-sm uppercase tracking-[0.2em] text-emerald-300">
                 Bejelentkezve
@@ -38,7 +41,7 @@ function HomePage() {
 
               <button
                 type="button"
-                onClick={handleLogout}
+                onClick={logout}
                 className="mt-4 rounded-xl border border-emerald-500/30 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:bg-emerald-500/10"
               >
                 Helyi kijelentkezés
@@ -67,20 +70,20 @@ function HomePage() {
           <section className="rounded-3xl border border-[rgba(100,108,255,0.2)] bg-[#1a1a1a] p-6">
             <h2 className="text-2xl font-semibold">Most készül</h2>
             <ul className="mt-4 list-disc space-y-2 pl-5 text-[rgba(255,255,255,0.72)] marker:text-[#646cff]">
-              <li>Frontend login form</li>
-              <li>Token mentés</li>
-              <li>Auth állapot kezelés</li>
-              <li>Board oldal integráció</li>
+              <li>Session visszaállítás</li>
+              <li>GET /api/auth/me használat</li>
+              <li>Protected route alap</li>
+              <li>Board UI integráció</li>
             </ul>
           </section>
 
           <section className="rounded-3xl border border-[rgba(100,108,255,0.2)] bg-[#1a1a1a] p-6">
             <h2 className="text-2xl font-semibold">Következő frontend backend kapcsolat</h2>
             <ul className="mt-4 list-disc space-y-2 pl-5 text-[rgba(255,255,255,0.72)] marker:text-[#646cff]">
-              <li>/api/auth/me használata</li>
               <li>Board lista lekérése</li>
-              <li>Protected route alap</li>
+              <li>Protected route</li>
               <li>Dashboard / board UI</li>
+              <li>Task kezelés frontendről</li>
             </ul>
           </section>
         </div>
