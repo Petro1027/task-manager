@@ -543,6 +543,14 @@ function BoardDetailPage() {
       <TaskDetailsModal
         task={selectedTask}
         onClose={() => setSelectedTask(null)}
+        onSaved={async () => {
+          await queryClient.invalidateQueries({
+            queryKey: ["board-detail", authUser?.id, boardId],
+          });
+          await queryClient.invalidateQueries({
+            queryKey: ["boards", authUser?.id],
+          });
+        }}
       />
     </>
   );
