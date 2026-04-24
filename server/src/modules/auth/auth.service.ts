@@ -87,3 +87,18 @@ export async function loginUser(input: {
     },
   };
 }
+
+export async function getCurrentUser(userId: string) {
+  return prisma.user.findUnique({
+    where: {
+      id: userId,
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+}

@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { ZodError } from "zod";
+import { requireAuth } from "./auth.middleware";
 import { loginBodySchema, registerBodySchema } from "./auth.schemas";
-import { loginUser, registerUser } from "./auth.service";
+import { getCurrentUser, loginUser, registerUser } from "./auth.service";
 
 const router = Router();
 
@@ -69,6 +70,34 @@ router.post("/login", async (request, response, next) => {
       return;
     }
 
+    next(error);
+  }
+});
+
+router.get("/me", requireAuth, async (request, response, next) => {
+  try {
+    const authUser = request.authUser;
+
+    if (!authUser) {
+      response.status(401).json({
+        message: "Unauthorized.",
+      });
+      return;
+    }
+
+    const user = await getCurrentUser(authUser.userId);
+
+    if (!user) {
+      response.status(404).json({
+        message: "User not found.",
+      });
+      return;
+    }
+
+    response.status(200).json({
+      user,
+    });
+  } catch (error) {
     next(error);
   }
 });
