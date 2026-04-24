@@ -1,7 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
 import { Link, Navigate } from "react-router-dom";
+import { z } from "zod";
 import { useAuth } from "../app/auth-context";
-import { API_BASE_URL } from "../lib/api";
+import { apiUrl } from "../lib/api";
 import { getAccessToken } from "../lib/auth";
 
 type BoardListItem = {
@@ -23,6 +26,16 @@ type BoardListItem = {
   };
 };
 
+const createBoardSchema = z.object({
+  title: z
+    .string()
+    .trim()
+    .min(1, "A board címe kötelező")
+    .max(100, "A board címe túl hosszú"),
+});
+
+type CreateBoardValues = z.infer<typeof createBoardSchema>;
+
 async function fetchBoards() {
   const token = getAccessToken();
 
@@ -30,7 +43,7 @@ async function fetchBoards() {
     throw new Error("Hiányzik a hozzáférési token.");
   }
 
-  const response = await fetch(`${API_BASE_URL}/api/boards`, {
+  const response = await fetch(apiUrl("/api/boards"), {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -48,13 +61,69 @@ async function fetchBoards() {
   return (await response.json()) as BoardListItem[];
 }
 
+async function createBoardRequest(values: CreateBoardValues) {
+  const token = getAccessToken();
+
+  if (!token) {
+    throw new Error("Hiányzik a hozzáférési token.");
+  }
+
+  const response = await fetch(apiUrl("/api/boards"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(values),
+  });
+
+  const data = (await response.json()) as
+    | BoardListItem
+    | {
+    message?: string;
+  };
+
+  if (response.status === 401) {
+    throw new Error("A munkamenet lejárt vagy érvénytelen. Jelentkezz be újra.");
+  }
+
+  if (!response.ok) {
+    throw new Error(data.message || "Nem sikerült létrehozni a boardot.");
+  }
+
+  return data as BoardListItem;
+}
+
 function BoardsPage() {
   const { authUser, isAuthReady } = useAuth();
+  const queryClient = useQueryClient();
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<CreateBoardValues>({
+    resolver: zodResolver(createBoardSchema),
+    defaultValues: {
+      title: "",
+    },
+  });
 
   const boardsQuery = useQuery({
     queryKey: ["boards", authUser?.id],
     queryFn: fetchBoards,
     enabled: isAuthReady && !!authUser,
+  });
+
+  const createBoardMutation = useMutation({
+    mutationFn: createBoardRequest,
+    onSuccess: async () => {
+      reset();
+      await queryClient.invalidateQueries({
+        queryKey: ["boards", authUser?.id],
+      });
+    },
   });
 
   const boards = boardsQuery.data ?? [];
@@ -102,7 +171,11 @@ function BoardsPage() {
                 <code className="mx-1 rounded bg-[#242424] px-2 py-1 text-sm text-[#646cff]">
                   GET /api/boards
                 </code>
-                endpointjáról jön.
+                endpointjáról jön, az új board pedig a
+                <code className="mx-1 rounded bg-[#242424] px-2 py-1 text-sm text-[#646cff]">
+                  POST /api/boards
+                </code>
+                hívással készül.
               </p>
             </div>
 
@@ -114,6 +187,58 @@ function BoardsPage() {
             </div>
           </div>
         </div>
+
+        <section className="rounded-3xl border border-[rgba(100,108,255,0.2)] bg-[#1a1a1a] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
+          <h2 className="text-2xl font-semibold">Új board létrehozása</h2>
+          <p className="mt-2 text-[rgba(255,255,255,0.72)]">
+            Adj meg egy címet, és a backend automatikusan létrehozza a 3 alap
+            oszlopot.
+          </p>
+
+          <form
+            onSubmit={handleSubmit((values) => createBoardMutation.mutate(values))}
+            className="mt-6 flex flex-col gap-4 md:flex-row md:items-start"
+          >
+            <div className="flex-1">
+              <label className="mb-2 block text-sm font-medium text-[rgba(255,255,255,0.82)]">
+                Board címe
+              </label>
+              <input
+                type="text"
+                {...register("title")}
+                className="w-full rounded-xl border border-[rgba(100,108,255,0.25)] bg-[#242424] px-4 py-3 outline-none transition focus:border-[#646cff]"
+                placeholder="Például: Sprint Planning"
+              />
+              {errors.title && (
+                <p className="mt-2 text-sm text-red-400">{errors.title.message}</p>
+              )}
+            </div>
+
+            <div className="md:pt-7">
+              <button
+                type="submit"
+                disabled={createBoardMutation.isPending}
+                className="w-full rounded-xl bg-[#646cff] px-5 py-3 font-medium text-white transition hover:bg-[#535bf2] disabled:cursor-not-allowed disabled:opacity-70 md:w-auto"
+              >
+                {createBoardMutation.isPending
+                  ? "Létrehozás..."
+                  : "Board létrehozása"}
+              </button>
+            </div>
+          </form>
+
+          {createBoardMutation.isError && (
+            <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+              {createBoardMutation.error.message}
+            </div>
+          )}
+
+          {createBoardMutation.isSuccess && (
+            <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+              A board sikeresen létrejött.
+            </div>
+          )}
+        </section>
 
         {boardsQuery.isLoading ? (
           <div className="rounded-3xl border border-[rgba(100,108,255,0.2)] bg-[#1a1a1a] p-8">
