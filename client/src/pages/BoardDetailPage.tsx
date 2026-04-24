@@ -1,9 +1,13 @@
 import { zodResolver } from "@hookform/resolvers/zod";
+import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { arrayMove } from "@dnd-kit/sortable";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { z } from "zod";
+import SortableTaskCard from "../components/tasks/SortableTaskCard";
+import TaskColumn from "../components/tasks/TaskColumn";
 import TaskDetailsModal from "../components/tasks/TaskDetailsModal";
 import { useAuth } from "../app/auth-context";
 import { apiUrl } from "../lib/api";
@@ -70,6 +74,8 @@ type BoardDetailResponse = {
   board: BoardDetail;
   tasks: BoardTask[];
 };
+
+type TasksByColumn = Record<string, BoardTask[]>;
 
 const createTaskSchema = z.object({
   title: z.string().trim().min(1, "A task címe kötelező").max(200, "A task címe túl hosszú"),
@@ -161,17 +167,68 @@ async function createTaskRequest(input: { boardId: string; values: CreateTaskVal
   return (await response.json()) as BoardTask;
 }
 
-function priorityBadgeClasses(priority: BoardTask["priority"]) {
-  switch (priority) {
-    case "HIGH":
-      return "border-red-500/30 bg-red-500/10 text-red-300";
-    case "MEDIUM":
-      return "border-amber-500/30 bg-amber-500/10 text-amber-300";
-    case "LOW":
-      return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
-    default:
-      return "border-[rgba(100,108,255,0.25)] bg-[#242424] text-[rgba(255,255,255,0.75)]";
+function normalizeColumnTasks(
+  tasks: BoardTask[],
+  column: BoardDetail["columns"][number],
+): BoardTask[] {
+  return tasks.map((task, index) => ({
+    ...task,
+    columnId: column.id,
+    column: {
+      id: column.id,
+      key: column.key,
+      title: column.title,
+      position: column.position,
+    },
+    position: index,
+  }));
+}
+
+function buildTasksByColumn(
+  columns: BoardDetail["columns"],
+  tasks: BoardTask[],
+): TasksByColumn {
+  const next: TasksByColumn = {};
+
+  const sortedColumns = [...columns].sort((a, b) => a.position - b.position);
+
+  for (const column of sortedColumns) {
+    next[column.id] = [];
   }
+
+  const activeTasks = tasks
+    .filter((task) => !task.archived)
+    .sort((a, b) => a.position - b.position);
+
+  for (const task of activeTasks) {
+    if (!next[task.columnId]) {
+      next[task.columnId] = [];
+    }
+
+    next[task.columnId].push(task);
+  }
+
+  for (const column of sortedColumns) {
+    next[column.id] = normalizeColumnTasks(next[column.id] ?? [], column);
+  }
+
+  return next;
+}
+
+function findTaskLocation(taskId: string, tasksByColumn: TasksByColumn) {
+  for (const [columnId, tasks] of Object.entries(tasksByColumn)) {
+    const index = tasks.findIndex((task) => task.id === taskId);
+
+    if (index !== -1) {
+      return {
+        columnId,
+        index,
+        task: tasks[index],
+      };
+    }
+  }
+
+  return null;
 }
 
 function BoardDetailPage() {
@@ -179,6 +236,15 @@ function BoardDetailPage() {
   const { authUser, isAuthReady } = useAuth();
   const queryClient = useQueryClient();
   const [selectedTask, setSelectedTask] = useState<BoardTask | null>(null);
+  const [tasksByColumn, setTasksByColumn] = useState<TasksByColumn>({});
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+  );
 
   const {
     register,
@@ -218,6 +284,118 @@ function BoardDetailPage() {
       });
     },
   });
+
+  useEffect(() => {
+    if (!boardQuery.data) {
+      return;
+    }
+
+    setTasksByColumn(
+      buildTasksByColumn(boardQuery.data.board.columns, boardQuery.data.tasks),
+    );
+  }, [boardQuery.data]);
+
+  const sortedColumns = useMemo(() => {
+    if (!boardQuery.data) {
+      return [];
+    }
+
+    return [...boardQuery.data.board.columns].sort((a, b) => a.position - b.position);
+  }, [boardQuery.data]);
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    if (!boardQuery.data) {
+      return;
+    }
+
+    const { active, over } = event;
+
+    if (!over) {
+      return;
+    }
+
+    const activeId = String(active.id);
+    const overType = over.data.current?.type as string | undefined;
+
+    setTasksByColumn((previous) => {
+      const source = findTaskLocation(activeId, previous);
+
+      if (!source) {
+        return previous;
+      }
+
+      const sourceColumn = sortedColumns.find((column) => column.id === source.columnId);
+
+      if (!sourceColumn) {
+        return previous;
+      }
+
+      const next: TasksByColumn = Object.fromEntries(
+        Object.entries(previous).map(([columnId, tasks]) => [columnId, [...tasks]]),
+      );
+
+      if (overType === "task") {
+        const target = findTaskLocation(String(over.id), next);
+
+        if (!target) {
+          return previous;
+        }
+
+        if (source.columnId === target.columnId) {
+          if (source.index === target.index) {
+            return previous;
+          }
+
+          next[source.columnId] = normalizeColumnTasks(
+            arrayMove(next[source.columnId], source.index, target.index),
+            sourceColumn,
+          );
+
+          return next;
+        }
+
+        const targetColumn = sortedColumns.find((column) => column.id === target.columnId);
+
+        if (!targetColumn) {
+          return previous;
+        }
+
+        const [movedTask] = next[source.columnId].splice(source.index, 1);
+
+        next[source.columnId] = normalizeColumnTasks(next[source.columnId], sourceColumn);
+
+        next[target.columnId].splice(target.index, 0, movedTask);
+        next[target.columnId] = normalizeColumnTasks(next[target.columnId], targetColumn);
+
+        return next;
+      }
+
+      if (overType === "column") {
+        const targetColumnId = over.data.current?.columnId as string | undefined;
+
+        if (!targetColumnId || targetColumnId === source.columnId) {
+          return previous;
+        }
+
+        const targetColumn = sortedColumns.find((column) => column.id === targetColumnId);
+
+        if (!targetColumn) {
+          return previous;
+        }
+
+        const [movedTask] = next[source.columnId].splice(source.index, 1);
+
+        next[source.columnId] = normalizeColumnTasks(next[source.columnId], sourceColumn);
+
+        next[targetColumnId].push(movedTask);
+        next[targetColumnId] = normalizeColumnTasks(next[targetColumnId], targetColumn);
+
+        return next;
+      }
+
+      return previous;
+    });
+  };
 
   if (!isAuthReady) {
     return (
@@ -286,8 +464,7 @@ function BoardDetailPage() {
     return null;
   }
 
-  const { board, tasks } = boardQuery.data;
-  const activeTasks = tasks.filter((task) => !task.archived);
+  const { board } = boardQuery.data;
 
   return (
     <>
@@ -306,15 +483,8 @@ function BoardDetailPage() {
                 <h1 className="mt-4 text-4xl font-semibold tracking-tight">{board.title}</h1>
 
                 <p className="mt-3 max-w-3xl text-[rgba(255,255,255,0.72)]">
-                  Ez a board részlet oldal a backend
-                  <code className="mx-1 rounded bg-[#242424] px-2 py-1 text-sm text-[#646cff]">
-                    GET /api/boards/:boardId
-                  </code>
-                  és
-                  <code className="mx-1 rounded bg-[#242424] px-2 py-1 text-sm text-[#646cff]">
-                    GET /api/boards/:boardId/tasks
-                  </code>
-                  endpointjait használja.
+                  A task kártyák most már húzhatók. Ebben a lépésben a mozgatás még
+                  frontend oldali, a következő lépésben mentjük adatbázisba is.
                 </p>
               </div>
 
@@ -443,100 +613,37 @@ function BoardDetailPage() {
             )}
           </section>
 
-          <section className="rounded-3xl border border-[rgba(100,108,255,0.2)] bg-[#1a1a1a] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
-            <h2 className="text-2xl font-semibold">Oszlopok</h2>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {board.columns.map((column) => (
-                <span
-                  key={column.id}
-                  className="rounded-full border border-[rgba(100,108,255,0.2)] bg-[#242424] px-3 py-2 text-sm text-[rgba(255,255,255,0.78)]"
-                >
-                  {column.title}
-                </span>
-              ))}
-            </div>
-          </section>
-
-          <section className="grid gap-6 lg:grid-cols-3">
-            {board.columns
-              .slice()
-              .sort((a, b) => a.position - b.position)
-              .map((column) => {
-                const columnTasks = activeTasks
-                  .filter((task) => task.columnId === column.id)
-                  .sort((a, b) => a.position - b.position);
+          <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+            <section className="grid gap-6 lg:grid-cols-3">
+              {sortedColumns.map((column) => {
+                const columnTasks = tasksByColumn[column.id] ?? [];
 
                 return (
-                  <div
+                  <TaskColumn
                     key={column.id}
-                    className="rounded-3xl border border-[rgba(100,108,255,0.2)] bg-[#1a1a1a] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.2)]"
+                    columnId={column.id}
+                    title={column.title}
+                    count={columnTasks.length}
+                    taskIds={columnTasks.map((task) => task.id)}
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <h2 className="text-xl font-semibold">{column.title}</h2>
-                      <span className="rounded-full border border-[rgba(100,108,255,0.2)] px-3 py-1 text-xs text-[rgba(255,255,255,0.72)]">
-                        {columnTasks.length} task
-                      </span>
-                    </div>
-
-                    <div className="mt-5 flex flex-col gap-4">
-                      {columnTasks.length === 0 ? (
-                        <div className="rounded-2xl border border-dashed border-[rgba(100,108,255,0.2)] bg-[#242424] p-4 text-sm text-[rgba(255,255,255,0.6)]">
-                          Nincs task ebben az oszlopban.
-                        </div>
-                      ) : (
-                        columnTasks.map((task) => (
-                          <button
-                            key={task.id}
-                            type="button"
-                            onClick={() => setSelectedTask(task)}
-                            className="rounded-2xl border border-[rgba(100,108,255,0.18)] bg-[#242424] p-4 text-left transition hover:border-[rgba(100,108,255,0.35)] hover:bg-[#2a2a2a]"
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <h3 className="text-lg font-medium">{task.title}</h3>
-                              <span
-                                className={`rounded-full border px-3 py-1 text-xs font-medium ${priorityBadgeClasses(task.priority)}`}
-                              >
-                                {task.priority}
-                              </span>
-                            </div>
-
-                            {task.description && (
-                              <p className="mt-3 text-sm leading-6 text-[rgba(255,255,255,0.72)]">
-                                {task.description}
-                              </p>
-                            )}
-
-                            <div className="mt-4 flex flex-wrap gap-2">
-                              {task.category && (
-                                <span className="rounded-full border border-[rgba(100,108,255,0.2)] px-3 py-1 text-xs text-[rgba(255,255,255,0.72)]">
-                                  {task.category}
-                                </span>
-                              )}
-
-                              {task.dueDate && (
-                                <span className="rounded-full border border-[rgba(100,108,255,0.2)] px-3 py-1 text-xs text-[rgba(255,255,255,0.72)]">
-                                  Határidő: {new Date(task.dueDate).toLocaleDateString("hu-HU")}
-                                </span>
-                              )}
-
-                              {task.taskTags.map((taskTag) => (
-                                <span
-                                  key={taskTag.tag.id}
-                                  className="rounded-full px-3 py-1 text-xs text-white"
-                                  style={{ backgroundColor: taskTag.tag.color }}
-                                >
-                                  {taskTag.tag.name}
-                                </span>
-                              ))}
-                            </div>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </div>
+                    {columnTasks.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-[rgba(100,108,255,0.2)] bg-[#242424] p-4 text-sm text-[rgba(255,255,255,0.6)]">
+                        Húzz ide taskot, vagy hozz létre egy újat.
+                      </div>
+                    ) : (
+                      columnTasks.map((task) => (
+                        <SortableTaskCard
+                          key={task.id}
+                          task={task}
+                          onClick={() => setSelectedTask(task)}
+                        />
+                      ))
+                    )}
+                  </TaskColumn>
                 );
               })}
-          </section>
+            </section>
+          </DndContext>
         </main>
       </div>
 
