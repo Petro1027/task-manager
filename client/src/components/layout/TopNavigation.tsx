@@ -1,4 +1,5 @@
 import { Link, NavLink } from "react-router-dom";
+import { useAuth } from "../../app/auth-context";
 import { useLanguage } from "../../app/language-context";
 import { useTheme } from "../../app/theme-context";
 
@@ -63,9 +64,20 @@ function navItemClass({ isActive }: { isActive: boolean }) {
   ].join(" ");
 }
 
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .map((part) => part.trim()[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
 function TopNavigation() {
   const { language, setLanguage } = useLanguage();
   const { theme, setTheme } = useTheme();
+  const { authUser, logout } = useAuth();
 
   const labels =
     language === "hu"
@@ -76,6 +88,7 @@ function TopNavigation() {
         register: "Regisztráció",
         light: "Világos",
         dark: "Sötét",
+        logout: "Kijelentkezés",
       }
       : {
         home: "Home",
@@ -84,6 +97,7 @@ function TopNavigation() {
         register: "Register",
         light: "Light",
         dark: "Dark",
+        logout: "Log out",
       };
 
   return (
@@ -216,29 +230,70 @@ function TopNavigation() {
             </button>
           </div>
 
-          <div className="hidden items-center gap-2 sm:flex">
-            <Link
-              to="/login"
-              className="rounded-xl px-4 py-2 text-sm font-medium transition hover:opacity-90"
-              style={{
-                background:
-                  "linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%)",
-              }}
-            >
-              {labels.login}
-            </Link>
+          {authUser ? (
+            <div className="flex items-center gap-3">
+              <div
+                className="flex items-center gap-3 rounded-2xl border px-3 py-2"
+                style={{
+                  borderColor: "var(--panel-border)",
+                  background: "rgba(255,255,255,0.03)",
+                }}
+              >
+                <div
+                  className="flex h-10 w-10 items-center justify-center rounded-xl text-sm font-semibold"
+                  style={{
+                    background: "var(--accent-soft)",
+                    color: "var(--accent)",
+                  }}
+                >
+                  {getInitials(authUser.name)}
+                </div>
 
-            <Link
-              to="/register"
-              className="rounded-xl px-4 py-2 text-sm font-semibold text-white shadow-lg transition hover:opacity-95"
-              style={{
-                background:
-                  "linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%)",
-              }}
-            >
-              {labels.register}
-            </Link>
-          </div>
+                <div className="hidden md:block leading-tight">
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">
+                    {authUser.name}
+                  </p>
+                  <p className="text-xs text-[var(--text-secondary)]">
+                    {authUser.email}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={logout}
+                className="rounded-xl px-4 py-2 text-sm font-medium transition hover:opacity-90"
+                style={{
+                  color: "var(--text-primary)",
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid var(--panel-border)",
+                }}
+              >
+                {labels.logout}
+              </button>
+            </div>
+          ) : (
+            <div className="hidden items-center gap-2 sm:flex">
+              <Link
+                to="/login"
+                className="rounded-xl px-4 py-2 text-sm font-medium transition hover:opacity-90"
+                style={{ color: "var(--text-primary)" }}
+              >
+                {labels.login}
+              </Link>
+
+              <Link
+                to="/register"
+                className="rounded-xl px-4 py-2 text-sm font-semibold text-white shadow-lg transition hover:opacity-95"
+                style={{
+                  background:
+                    "linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%)",
+                }}
+              >
+                {labels.register}
+              </Link>
+            </div>
+          )}
         </div>
       </div>
     </header>
