@@ -5,28 +5,12 @@ function clampPosition(position: number, maxPosition: number) {
   return Math.max(0, Math.min(position, maxPosition));
 }
 
-async function getDemoUserOrThrow() {
-  const user = await prisma.user.findUnique({
-    where: {
-      email: "demo@example.com",
-    },
-  });
-
-  if (!user) {
-    throw new Error("Demo user not found. Run the seed command first.");
-  }
-
-  return user;
-}
-
-async function getOwnedTaskOrNull(taskId: string) {
-  const user = await getDemoUserOrThrow();
-
+async function getOwnedTaskOrNull(userId: string, taskId: string) {
   return prisma.task.findFirst({
     where: {
       id: taskId,
       board: {
-        ownerId: user.id,
+        ownerId: userId,
       },
     },
     include: {
@@ -113,14 +97,12 @@ export async function createTaskForBoard(input: {
   });
 }
 
-export async function getTaskById(taskId: string) {
-  const user = await getDemoUserOrThrow();
-
+export async function getTaskById(userId: string, taskId: string) {
   return prisma.task.findFirst({
     where: {
       id: taskId,
       board: {
-        ownerId: user.id,
+        ownerId: userId,
       },
     },
     include: {
@@ -148,6 +130,7 @@ export async function getTaskById(taskId: string) {
 }
 
 export async function updateTaskById(
+  userId: string,
   taskId: string,
   input: {
     title?: string;
@@ -157,7 +140,7 @@ export async function updateTaskById(
     dueDate?: string | null;
   },
 ) {
-  const task = await getOwnedTaskOrNull(taskId);
+  const task = await getOwnedTaskOrNull(userId, taskId);
 
   if (!task) {
     return null;
@@ -214,8 +197,8 @@ export async function updateTaskById(
   });
 }
 
-export async function deleteTaskById(taskId: string) {
-  const task = await getOwnedTaskOrNull(taskId);
+export async function deleteTaskById(userId: string, taskId: string) {
+  const task = await getOwnedTaskOrNull(userId, taskId);
 
   if (!task) {
     return null;
@@ -233,8 +216,8 @@ export async function deleteTaskById(taskId: string) {
   };
 }
 
-export async function archiveTaskById(taskId: string, archived: boolean) {
-  const task = await getOwnedTaskOrNull(taskId);
+export async function archiveTaskById(userId: string, taskId: string, archived: boolean) {
+  const task = await getOwnedTaskOrNull(userId, taskId);
 
   if (!task) {
     return null;
@@ -272,13 +255,14 @@ export async function archiveTaskById(taskId: string, archived: boolean) {
 }
 
 export async function moveTaskById(
+  userId: string,
   taskId: string,
   input: {
     columnKey: ColumnKey;
     position: number;
   },
 ) {
-  const task = await getOwnedTaskOrNull(taskId);
+  const task = await getOwnedTaskOrNull(userId, taskId);
 
   if (!task) {
     return null;

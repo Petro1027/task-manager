@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { ZodError } from "zod";
+import { requireAuth } from "../auth/auth.middleware";
 import {
   archiveTaskById,
   deleteTaskById,
@@ -16,10 +17,21 @@ import {
 
 const router = Router();
 
+router.use(requireAuth);
+
 router.get("/:taskId", async (request, response, next) => {
   try {
+    const authUser = request.authUser;
+
+    if (!authUser) {
+      response.status(401).json({
+        message: "Unauthorized.",
+      });
+      return;
+    }
+
     const params = taskParamsSchema.parse(request.params);
-    const task = await getTaskById(params.taskId);
+    const task = await getTaskById(authUser.userId, params.taskId);
 
     if (!task) {
       response.status(404).json({
@@ -44,10 +56,19 @@ router.get("/:taskId", async (request, response, next) => {
 
 router.patch("/:taskId/archive", async (request, response, next) => {
   try {
+    const authUser = request.authUser;
+
+    if (!authUser) {
+      response.status(401).json({
+        message: "Unauthorized.",
+      });
+      return;
+    }
+
     const params = taskParamsSchema.parse(request.params);
     const body = archiveTaskBodySchema.parse(request.body);
 
-    const task = await archiveTaskById(params.taskId, body.archived);
+    const task = await archiveTaskById(authUser.userId, params.taskId, body.archived);
 
     if (!task) {
       response.status(404).json({
@@ -72,10 +93,19 @@ router.patch("/:taskId/archive", async (request, response, next) => {
 
 router.patch("/:taskId/move", async (request, response, next) => {
   try {
+    const authUser = request.authUser;
+
+    if (!authUser) {
+      response.status(401).json({
+        message: "Unauthorized.",
+      });
+      return;
+    }
+
     const params = taskParamsSchema.parse(request.params);
     const body = moveTaskBodySchema.parse(request.body);
 
-    const task = await moveTaskById(params.taskId, body);
+    const task = await moveTaskById(authUser.userId, params.taskId, body);
 
     if (!task) {
       response.status(404).json({
@@ -100,10 +130,19 @@ router.patch("/:taskId/move", async (request, response, next) => {
 
 router.patch("/:taskId", async (request, response, next) => {
   try {
+    const authUser = request.authUser;
+
+    if (!authUser) {
+      response.status(401).json({
+        message: "Unauthorized.",
+      });
+      return;
+    }
+
     const params = taskParamsSchema.parse(request.params);
     const body = updateTaskBodySchema.parse(request.body);
 
-    const task = await updateTaskById(params.taskId, body);
+    const task = await updateTaskById(authUser.userId, params.taskId, body);
 
     if (!task) {
       response.status(404).json({
@@ -128,8 +167,17 @@ router.patch("/:taskId", async (request, response, next) => {
 
 router.delete("/:taskId", async (request, response, next) => {
   try {
+    const authUser = request.authUser;
+
+    if (!authUser) {
+      response.status(401).json({
+        message: "Unauthorized.",
+      });
+      return;
+    }
+
     const params = taskParamsSchema.parse(request.params);
-    const result = await deleteTaskById(params.taskId);
+    const result = await deleteTaskById(authUser.userId, params.taskId);
 
     if (!result) {
       response.status(404).json({
