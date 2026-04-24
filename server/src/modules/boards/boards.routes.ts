@@ -1,15 +1,27 @@
 import { Router } from "express";
 import { ZodError } from "zod";
-import { boardParamsSchema, createBoardBodySchema } from "./boards.schemas";
-import { createBoard, getBoardById, getBoards, getBoardTasks } from "./boards.service";
+import { requireAuth } from "../auth/auth.middleware";
 import { createTaskBodySchema } from "../tasks/tasks.schemas";
 import { createTaskForBoard } from "../tasks/tasks.service";
+import { boardParamsSchema, createBoardBodySchema } from "./boards.schemas";
+import { createBoard, getBoardById, getBoards, getBoardTasks } from "./boards.service";
 
 const router = Router();
 
-router.get("/", async (_request, response, next) => {
+router.use(requireAuth);
+
+router.get("/", async (request, response, next) => {
   try {
-    const boards = await getBoards();
+    const authUser = request.authUser;
+
+    if (!authUser) {
+      response.status(401).json({
+        message: "Unauthorized.",
+      });
+      return;
+    }
+
+    const boards = await getBoards(authUser.userId);
 
     response.status(200).json(boards);
   } catch (error) {
@@ -19,8 +31,17 @@ router.get("/", async (_request, response, next) => {
 
 router.get("/:boardId", async (request, response, next) => {
   try {
+    const authUser = request.authUser;
+
+    if (!authUser) {
+      response.status(401).json({
+        message: "Unauthorized.",
+      });
+      return;
+    }
+
     const params = boardParamsSchema.parse(request.params);
-    const board = await getBoardById(params.boardId);
+    const board = await getBoardById(authUser.userId, params.boardId);
 
     if (!board) {
       response.status(404).json({
@@ -45,8 +66,17 @@ router.get("/:boardId", async (request, response, next) => {
 
 router.get("/:boardId/tasks", async (request, response, next) => {
   try {
+    const authUser = request.authUser;
+
+    if (!authUser) {
+      response.status(401).json({
+        message: "Unauthorized.",
+      });
+      return;
+    }
+
     const params = boardParamsSchema.parse(request.params);
-    const tasks = await getBoardTasks(params.boardId);
+    const tasks = await getBoardTasks(authUser.userId, params.boardId);
 
     if (!tasks) {
       response.status(404).json({
@@ -71,10 +101,20 @@ router.get("/:boardId/tasks", async (request, response, next) => {
 
 router.post("/:boardId/tasks", async (request, response, next) => {
   try {
+    const authUser = request.authUser;
+
+    if (!authUser) {
+      response.status(401).json({
+        message: "Unauthorized.",
+      });
+      return;
+    }
+
     const params = boardParamsSchema.parse(request.params);
     const body = createTaskBodySchema.parse(request.body);
 
     const task = await createTaskForBoard({
+      userId: authUser.userId,
       boardId: params.boardId,
       title: body.title,
       description: body.description,
@@ -107,8 +147,17 @@ router.post("/:boardId/tasks", async (request, response, next) => {
 
 router.post("/", async (request, response, next) => {
   try {
+    const authUser = request.authUser;
+
+    if (!authUser) {
+      response.status(401).json({
+        message: "Unauthorized.",
+      });
+      return;
+    }
+
     const body = createBoardBodySchema.parse(request.body);
-    const board = await createBoard(body.title);
+    const board = await createBoard(authUser.userId, body.title);
 
     response.status(201).json(board);
   } catch (error) {

@@ -1,39 +1,10 @@
 import { ColumnKey } from "@prisma/client";
 import prisma from "../../lib/prisma";
 
-const DEMO_USER_EMAIL = "demo@example.com";
-
-async function getDemoUserOrThrow() {
-  const user = await prisma.user.findUnique({
-    where: {
-      email: DEMO_USER_EMAIL,
-    },
-  });
-
-  if (!user) {
-    throw new Error("Demo user not found. Run the seed command first.");
-  }
-
-  return user;
-}
-
-async function getOwnedBoardOrNull(boardId: string) {
-  const user = await getDemoUserOrThrow();
-
-  return prisma.board.findFirst({
-    where: {
-      id: boardId,
-      ownerId: user.id,
-    },
-  });
-}
-
-export async function getBoards() {
-  const user = await getDemoUserOrThrow();
-
+export async function getBoards(userId: string) {
   return prisma.board.findMany({
     where: {
-      ownerId: user.id,
+      ownerId: userId,
     },
     include: {
       columns: {
@@ -54,13 +25,11 @@ export async function getBoards() {
   });
 }
 
-export async function getBoardById(boardId: string) {
-  const user = await getDemoUserOrThrow();
-
+export async function getBoardById(userId: string, boardId: string) {
   return prisma.board.findFirst({
     where: {
       id: boardId,
-      ownerId: user.id,
+      ownerId: userId,
     },
     include: {
       columns: {
@@ -83,8 +52,13 @@ export async function getBoardById(boardId: string) {
   });
 }
 
-export async function getBoardTasks(boardId: string) {
-  const board = await getOwnedBoardOrNull(boardId);
+export async function getBoardTasks(userId: string, boardId: string) {
+  const board = await prisma.board.findFirst({
+    where: {
+      id: boardId,
+      ownerId: userId,
+    },
+  });
 
   if (!board) {
     return null;
@@ -123,14 +97,12 @@ export async function getBoardTasks(boardId: string) {
   });
 }
 
-export async function createBoard(title: string) {
-  const user = await getDemoUserOrThrow();
-
+export async function createBoard(userId: string, title: string) {
   return prisma.$transaction(async (tx) => {
     const board = await tx.board.create({
       data: {
         title,
-        ownerId: user.id,
+        ownerId: userId,
       },
     });
 

@@ -1,8 +1,6 @@
 import { ColumnKey, Prisma, TaskPriority } from "@prisma/client";
 import prisma from "../../lib/prisma";
 
-const DEMO_USER_EMAIL = "demo@example.com";
-
 function clampPosition(position: number, maxPosition: number) {
   return Math.max(0, Math.min(position, maxPosition));
 }
@@ -10,7 +8,7 @@ function clampPosition(position: number, maxPosition: number) {
 async function getDemoUserOrThrow() {
   const user = await prisma.user.findUnique({
     where: {
-      email: DEMO_USER_EMAIL,
+      email: "demo@example.com",
     },
   });
 
@@ -43,6 +41,7 @@ async function getOwnedTaskOrNull(taskId: string) {
 }
 
 export async function createTaskForBoard(input: {
+  userId: string;
   boardId: string;
   title: string;
   description?: string;
@@ -51,12 +50,10 @@ export async function createTaskForBoard(input: {
   dueDate?: string;
   columnKey: ColumnKey;
 }) {
-  const user = await getDemoUserOrThrow();
-
   const board = await prisma.board.findFirst({
     where: {
       id: input.boardId,
-      ownerId: user.id,
+      ownerId: input.userId,
     },
     include: {
       columns: true,
@@ -89,7 +86,7 @@ export async function createTaskForBoard(input: {
     data: {
       boardId: board.id,
       columnId: targetColumn.id,
-      authorId: user.id,
+      authorId: input.userId,
       title: input.title,
       description: input.description || null,
       priority: input.priority ?? TaskPriority.MEDIUM,
