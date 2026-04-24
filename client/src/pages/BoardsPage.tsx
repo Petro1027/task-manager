@@ -4,25 +4,24 @@ import { useForm } from "react-hook-form";
 import { Link, Navigate } from "react-router-dom";
 import { z } from "zod";
 import { useAuth } from "../app/auth-context";
+import { useLanguage } from "../app/language-context";
+import AppShell from "../components/layout/AppShell";
+import SurfaceCard from "../components/ui/SurfaceCard";
 import { fetchBoards, type BoardListItem } from "../features/boards/boards-api";
 import { apiUrl } from "../lib/api";
 import { getAccessToken } from "../lib/auth";
 
-const createBoardSchema = z.object({
-  title: z
-    .string()
-    .trim()
-    .min(1, "A board címe kötelező")
-    .max(100, "A board címe túl hosszú"),
+const createBoardSchemaBase = z.object({
+  title: z.string().trim().min(1).max(100),
 });
 
-type CreateBoardValues = z.infer<typeof createBoardSchema>;
+type CreateBoardValues = z.infer<typeof createBoardSchemaBase>;
 
 async function createBoardRequest(values: CreateBoardValues) {
   const token = getAccessToken();
 
   if (!token) {
-    throw new Error("Hiányzik a hozzáférési token.");
+    throw new Error("Missing access token.");
   }
 
   const response = await fetch(apiUrl("/api/boards"), {
@@ -35,22 +34,98 @@ async function createBoardRequest(values: CreateBoardValues) {
   });
 
   if (response.status === 401) {
-    throw new Error("A munkamenet lejárt vagy érvénytelen. Jelentkezz be újra.");
+    throw new Error("Session expired or invalid.");
   }
 
   if (!response.ok) {
     const errorData = (await response.json()) as { message?: string };
-
-    throw new Error(errorData.message || "Nem sikerült létrehozni a boardot.");
+    throw new Error(errorData.message || "Failed to create board.");
   }
 
-  const successData = (await response.json()) as BoardListItem;
-  return successData;
+  return (await response.json()) as BoardListItem;
 }
 
 function BoardsPage() {
   const { authUser, isAuthReady } = useAuth();
+  const { language } = useLanguage();
   const queryClient = useQueryClient();
+
+  const copy =
+    language === "hu"
+      ? {
+        badge: "Boardok",
+        title: "Saját boardok",
+        description:
+          "Itt láthatod az összes saját boardodat, újakat hozhatsz létre, és megnyithatod a részletes Kanban nézetet.",
+        loadingTitle: "Session ellenőrzése",
+        loadingText: "Betöltjük a bejelentkezési állapotot...",
+        createTitle: "Új board létrehozása",
+        createDescription:
+          "Adj meg egy címet, és a backend automatikusan létrehozza a 3 alap oszlopot.",
+        boardTitleLabel: "Board címe",
+        boardPlaceholder: "Például: Sprint Planning",
+        createButton: "Board létrehozása",
+        creatingButton: "Létrehozás...",
+        createSuccess: "A board sikeresen létrejött.",
+        emptyTitle: "Még nincs board",
+        emptyText: "Ehhez a felhasználóhoz még nincs board.",
+        loadErrorTitle: "Hiba",
+        loadingBoards: "Boardok betöltése...",
+        openBoard: "Megnyitás",
+        columns: "Oszlopok",
+        tasks: "Taskok",
+        tags: "Tagek",
+        overviewTitle: "Áttekintés",
+        overviewText:
+          "A boardokhoz tartozó taskok és tagek számát itt gyorsan át tudod nézni.",
+        accountTitle: "Aktív profil",
+        titleRequired: "A board címe kötelező.",
+        titleTooLong: "A board címe túl hosszú.",
+        missingToken: "Hiányzik a hozzáférési token.",
+        sessionExpired: "A munkamenet lejárt vagy érvénytelen. Jelentkezz be újra.",
+        createFallback: "Nem sikerült létrehozni a boardot.",
+      }
+      : {
+        badge: "Boards",
+        title: "My boards",
+        description:
+          "Here you can see all your boards, create new ones, and open the detailed Kanban view.",
+        loadingTitle: "Checking session",
+        loadingText: "Loading authentication state...",
+        createTitle: "Create a new board",
+        createDescription:
+          "Enter a title and the backend will automatically create the 3 default columns.",
+        boardTitleLabel: "Board title",
+        boardPlaceholder: "For example: Sprint Planning",
+        createButton: "Create board",
+        creatingButton: "Creating...",
+        createSuccess: "Board created successfully.",
+        emptyTitle: "No boards yet",
+        emptyText: "There are no boards for this user yet.",
+        loadErrorTitle: "Error",
+        loadingBoards: "Loading boards...",
+        openBoard: "Open",
+        columns: "Columns",
+        tasks: "Tasks",
+        tags: "Tags",
+        overviewTitle: "Overview",
+        overviewText:
+          "You can quickly review the number of tasks and tags on each board here.",
+        accountTitle: "Active profile",
+        titleRequired: "Board title is required.",
+        titleTooLong: "Board title is too long.",
+        missingToken: "Missing access token.",
+        sessionExpired: "Session expired or invalid. Please sign in again.",
+        createFallback: "Failed to create board.",
+      };
+
+  const localizedSchema = z.object({
+    title: z
+      .string()
+      .trim()
+      .min(1, copy.titleRequired)
+      .max(100, copy.titleTooLong),
+  });
 
   const {
     register,
@@ -58,7 +133,7 @@ function BoardsPage() {
     reset,
     formState: { errors },
   } = useForm<CreateBoardValues>({
-    resolver: zodResolver(createBoardSchema),
+    resolver: zodResolver(localizedSchema),
     defaultValues: {
       title: "",
     },
@@ -71,7 +146,29 @@ function BoardsPage() {
   });
 
   const createBoardMutation = useMutation({
-    mutationFn: createBoardRequest,
+    mutationFn: async (values: CreateBoardValues) => {
+      try {
+        return await createBoardRequest(values);
+      } catch (error) {
+        if (!(error instanceof Error)) {
+          throw error;
+        }
+
+        if (error.message === "Missing access token.") {
+          throw new Error(copy.missingToken);
+        }
+
+        if (error.message === "Session expired or invalid.") {
+          throw new Error(copy.sessionExpired);
+        }
+
+        if (error.message === "Failed to create board.") {
+          throw new Error(copy.createFallback);
+        }
+
+        throw error;
+      }
+    },
     onSuccess: async () => {
       reset();
       await queryClient.invalidateQueries({
@@ -84,18 +181,19 @@ function BoardsPage() {
 
   if (!isAuthReady) {
     return (
-      <div className="min-h-screen bg-[#242424] px-4 py-12 text-[rgba(255,255,255,0.87)]">
-        <main className="mx-auto w-full max-w-5xl">
-          <div className="rounded-3xl border border-[rgba(100,108,255,0.25)] bg-[#1a1a1a] p-8">
-            <p className="text-sm uppercase tracking-[0.2em] text-[#646cff]">
-              Session ellenőrzése
-            </p>
-            <p className="mt-3 text-[rgba(255,255,255,0.72)]">
-              Betöltjük a bejelentkezési állapotot...
-            </p>
-          </div>
-        </main>
-      </div>
+      <AppShell>
+        <SurfaceCard>
+          <p
+            className="text-xs uppercase tracking-[0.22em]"
+            style={{ color: "var(--accent)" }}
+          >
+            {copy.loadingTitle}
+          </p>
+          <p className="mt-3 text-base" style={{ color: "var(--text-secondary)" }}>
+            {copy.loadingText}
+          </p>
+        </SurfaceCard>
+      </AppShell>
     );
   }
 
@@ -104,192 +202,324 @@ function BoardsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#242424] px-4 py-12 text-[rgba(255,255,255,0.87)]">
-      <main className="mx-auto flex w-full max-w-6xl flex-col gap-8">
-        <div className="rounded-3xl border border-[rgba(100,108,255,0.25)] bg-[#1a1a1a] p-8 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <Link
-                to="/"
-                className="text-sm text-[#646cff] transition hover:text-[#535bf2]"
+    <AppShell>
+      <SurfaceCard>
+        <div className="flex flex-col gap-8 xl:flex-row xl:items-start xl:justify-between">
+          <div className="max-w-3xl">
+            <span
+              className="inline-flex rounded-full border px-3 py-1 text-sm font-medium"
+              style={{
+                borderColor: "var(--panel-border)",
+                backgroundColor: "var(--accent-soft)",
+                color: "var(--accent)",
+              }}
+            >
+              {copy.badge}
+            </span>
+
+            <h1 className="mt-6 text-4xl font-semibold tracking-tight sm:text-5xl">
+              {copy.title}
+            </h1>
+
+            <p
+              className="mt-4 max-w-2xl text-base leading-8 md:text-lg"
+              style={{ color: "var(--text-secondary)" }}
+            >
+              {copy.description}
+            </p>
+          </div>
+
+          <div
+            className="w-full max-w-sm rounded-[28px] border p-5"
+            style={{
+              background: "var(--surface-2)",
+              borderColor: "var(--panel-border)",
+            }}
+          >
+            <p
+              className="text-xs uppercase tracking-[0.22em]"
+              style={{ color: "var(--accent)" }}
+            >
+              {copy.accountTitle}
+            </p>
+
+            <div className="mt-4 flex items-center gap-4">
+              <div
+                className="flex h-14 w-14 items-center justify-center rounded-2xl text-lg font-semibold"
+                style={{
+                  background: "var(--accent-soft)",
+                  color: "var(--accent)",
+                }}
               >
-                ← Vissza a főoldalra
-              </Link>
+                {authUser.name
+                  .split(" ")
+                  .map((part) => part[0])
+                  .slice(0, 2)
+                  .join("")
+                  .toUpperCase()}
+              </div>
 
-              <h1 className="mt-4 text-4xl font-semibold tracking-tight">
-                Saját boardok
-              </h1>
-
-              <p className="mt-3 max-w-3xl text-[rgba(255,255,255,0.72)]">
-                Ez az első auth-os board oldal. A lista a backend
-                <code className="mx-1 rounded bg-[#242424] px-2 py-1 text-sm text-[#646cff]">
-                  GET /api/boards
-                </code>
-                endpointjáról jön, az új board pedig a
-                <code className="mx-1 rounded bg-[#242424] px-2 py-1 text-sm text-[#646cff]">
-                  POST /api/boards
-                </code>
-                hívással készül.
-              </p>
+              <div>
+                <h2 className="text-xl font-semibold">{authUser.name}</h2>
+                <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+                  {authUser.email}
+                </p>
+              </div>
             </div>
 
-            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3">
-              <p className="text-sm text-emerald-300">{authUser.name}</p>
-              <p className="text-xs text-[rgba(255,255,255,0.7)]">
-                {authUser.email}
-              </p>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <div
+                className="rounded-2xl border p-4"
+                style={{
+                  background: "var(--surface-3)",
+                  borderColor: "var(--panel-border)",
+                }}
+              >
+                <p className="text-xs uppercase tracking-[0.18em]" style={{ color: "var(--text-muted)" }}>
+                  {copy.tasks}
+                </p>
+                <p className="mt-2 text-2xl font-semibold">
+                  {boards.reduce((sum, board) => sum + board._count.tasks, 0)}
+                </p>
+              </div>
+
+              <div
+                className="rounded-2xl border p-4"
+                style={{
+                  background: "var(--surface-3)",
+                  borderColor: "var(--panel-border)",
+                }}
+              >
+                <p className="text-xs uppercase tracking-[0.18em]" style={{ color: "var(--text-muted)" }}>
+                  {copy.tags}
+                </p>
+                <p className="mt-2 text-2xl font-semibold">
+                  {boards.reduce((sum, board) => sum + board._count.tags, 0)}
+                </p>
+              </div>
             </div>
           </div>
         </div>
+      </SurfaceCard>
 
-        <section className="rounded-3xl border border-[rgba(100,108,255,0.2)] bg-[#1a1a1a] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
-          <h2 className="text-2xl font-semibold">Új board létrehozása</h2>
-          <p className="mt-2 text-[rgba(255,255,255,0.72)]">
-            Adj meg egy címet, és a backend automatikusan létrehozza a 3 alap
-            oszlopot.
+      <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+        <SurfaceCard>
+          <h2 className="text-2xl font-semibold">{copy.createTitle}</h2>
+          <p className="mt-3 text-base leading-7" style={{ color: "var(--text-secondary)" }}>
+            {copy.createDescription}
           </p>
 
           <form
             onSubmit={handleSubmit((values) => createBoardMutation.mutate(values))}
-            className="mt-6 flex flex-col gap-4 md:flex-row md:items-start"
+            className="mt-6 flex flex-col gap-5"
           >
-            <div className="flex-1">
-              <label className="mb-2 block text-sm font-medium text-[rgba(255,255,255,0.82)]">
-                Board címe
+            <div>
+              <label
+                className="mb-2 block text-sm font-medium"
+                style={{ color: "var(--text-primary)" }}
+              >
+                {copy.boardTitleLabel}
               </label>
+
               <input
                 type="text"
                 {...register("title")}
-                className="w-full rounded-xl border border-[rgba(100,108,255,0.25)] bg-[#242424] px-4 py-3 outline-none transition focus:border-[#646cff]"
-                placeholder="Például: Sprint Planning"
+                placeholder={copy.boardPlaceholder}
+                className="w-full rounded-2xl border px-4 py-3 outline-none"
+                style={{
+                  borderColor: "var(--panel-border)",
+                  background: "var(--surface-3)",
+                  color: "var(--text-primary)",
+                }}
               />
+
               {errors.title && (
                 <p className="mt-2 text-sm text-red-400">{errors.title.message}</p>
               )}
             </div>
 
-            <div className="md:pt-7">
-              <button
-                type="submit"
-                disabled={createBoardMutation.isPending}
-                className="w-full rounded-xl bg-[#646cff] px-5 py-3 font-medium text-white transition hover:bg-[#535bf2] disabled:cursor-not-allowed disabled:opacity-70 md:w-auto"
+            {createBoardMutation.isError && (
+              <div
+                className="rounded-2xl border px-4 py-3 text-sm"
+                style={{
+                  borderColor: "rgba(239, 68, 68, 0.28)",
+                  background: "rgba(239, 68, 68, 0.1)",
+                  color: "#fca5a5",
+                }}
               >
-                {createBoardMutation.isPending
-                  ? "Létrehozás..."
-                  : "Board létrehozása"}
-              </button>
-            </div>
+                {createBoardMutation.error.message}
+              </div>
+            )}
+
+            {createBoardMutation.isSuccess && (
+              <div
+                className="rounded-2xl border px-4 py-3 text-sm"
+                style={{
+                  borderColor: "var(--success-border)",
+                  background: "var(--success-soft)",
+                  color: "#86efac",
+                }}
+              >
+                {copy.createSuccess}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={createBoardMutation.isPending}
+              className="rounded-2xl px-5 py-3 text-sm font-semibold text-white shadow-lg transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-70"
+              style={{
+                background:
+                  "linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%)",
+              }}
+            >
+              {createBoardMutation.isPending
+                ? copy.creatingButton
+                : copy.createButton}
+            </button>
           </form>
+        </SurfaceCard>
 
-          {createBoardMutation.isError && (
-            <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-              {createBoardMutation.error.message}
+        <SurfaceCard>
+          <h2 className="text-2xl font-semibold">{copy.overviewTitle}</h2>
+          <p className="mt-3 text-base leading-7" style={{ color: "var(--text-secondary)" }}>
+            {copy.overviewText}
+          </p>
+
+          {boardsQuery.isLoading ? (
+            <div
+              className="mt-6 rounded-2xl border p-5"
+              style={{
+                background: "var(--surface-2)",
+                borderColor: "var(--panel-border)",
+              }}
+            >
+              <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+                {copy.loadingBoards}
+              </p>
             </div>
-          )}
-
-          {createBoardMutation.isSuccess && (
-            <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
-              A board sikeresen létrejött.
+          ) : boardsQuery.isError ? (
+            <div
+              className="mt-6 rounded-2xl border p-5"
+              style={{
+                borderColor: "rgba(239, 68, 68, 0.28)",
+                background: "rgba(239, 68, 68, 0.1)",
+                color: "#fca5a5",
+              }}
+            >
+              <p className="text-sm font-medium">{copy.loadErrorTitle}</p>
+              <p className="mt-2 text-sm">{boardsQuery.error.message}</p>
             </div>
-          )}
-        </section>
-
-        {boardsQuery.isLoading ? (
-          <div className="rounded-3xl border border-[rgba(100,108,255,0.2)] bg-[#1a1a1a] p-8">
-            <p className="text-sm uppercase tracking-[0.2em] text-[#646cff]">
-              Betöltés
-            </p>
-            <p className="mt-3 text-[rgba(255,255,255,0.72)]">
-              Boardok betöltése...
-            </p>
-          </div>
-        ) : boardsQuery.isError ? (
-          <div className="rounded-3xl border border-red-500/30 bg-red-500/10 p-8">
-            <p className="text-sm uppercase tracking-[0.2em] text-red-300">
-              Hiba
-            </p>
-            <p className="mt-3 text-red-200">{boardsQuery.error.message}</p>
-          </div>
-        ) : boards.length === 0 ? (
-          <div className="rounded-3xl border border-[rgba(100,108,255,0.2)] bg-[#1a1a1a] p-8">
-            <p className="text-sm uppercase tracking-[0.2em] text-[#646cff]">
-              Üres állapot
-            </p>
-            <p className="mt-3 text-[rgba(255,255,255,0.72)]">
-              Ehhez a felhasználóhoz még nincs board.
-            </p>
-          </div>
-        ) : (
-          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {boards.map((board) => (
-              <article
-                key={board.id}
-                className="rounded-3xl border border-[rgba(100,108,255,0.2)] bg-[#1a1a1a] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.25)]"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-sm uppercase tracking-[0.2em] text-[#646cff]">
-                      Board
-                    </p>
-                    <h2 className="mt-2 text-2xl font-semibold">
-                      {board.title}
-                    </h2>
-                  </div>
-
-                  <span className="rounded-full border border-[rgba(100,108,255,0.25)] px-3 py-1 text-xs text-[rgba(255,255,255,0.75)]">
-                    {board.columns.length} oszlop
-                  </span>
-                </div>
-
-                <div className="mt-6 grid grid-cols-2 gap-3">
-                  <div className="rounded-2xl bg-[#242424] p-4">
-                    <p className="text-xs uppercase tracking-[0.2em] text-[rgba(255,255,255,0.5)]">
-                      Taskok
-                    </p>
-                    <p className="mt-2 text-2xl font-semibold">
-                      {board._count.tasks}
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl bg-[#242424] p-4">
-                    <p className="text-xs uppercase tracking-[0.2em] text-[rgba(255,255,255,0.5)]">
-                      Tagek
-                    </p>
-                    <p className="mt-2 text-2xl font-semibold">
-                      {board._count.tags}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-6">
-                  <p className="mb-3 text-sm font-medium text-[rgba(255,255,255,0.82)]">
-                    Oszlopok
-                  </p>
-
-                  <div className="flex flex-wrap gap-2">
-                    {board.columns.map((column) => (
-                      <span
-                        key={column.id}
-                        className="rounded-full border border-[rgba(100,108,255,0.2)] bg-[#242424] px-3 py-2 text-sm text-[rgba(255,255,255,0.78)]"
-                      >
-                        {column.title}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <Link
-                  to={`/boards/${board.id}`}
-                  className="mt-6 inline-flex rounded-xl bg-[#646cff] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#535bf2]"
+          ) : boards.length === 0 ? (
+            <div
+              className="mt-6 rounded-2xl border p-5"
+              style={{
+                background: "var(--surface-2)",
+                borderColor: "var(--panel-border)",
+              }}
+            >
+              <p className="text-lg font-semibold">{copy.emptyTitle}</p>
+              <p className="mt-2 text-sm" style={{ color: "var(--text-secondary)" }}>
+                {copy.emptyText}
+              </p>
+            </div>
+          ) : (
+            <div className="mt-6 grid gap-4">
+              {boards.map((board) => (
+                <article
+                  key={board.id}
+                  className="rounded-[28px] border p-5"
+                  style={{
+                    background: "var(--surface-2)",
+                    borderColor: "var(--panel-border)",
+                  }}
                 >
-                  Megnyitás
-                </Link>
-              </article>
-            ))}
-          </div>
-        )}
-      </main>
-    </div>
+                  <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="max-w-2xl">
+                      <p
+                        className="text-xs uppercase tracking-[0.22em]"
+                        style={{ color: "var(--accent)" }}
+                      >
+                        {copy.badge}
+                      </p>
+
+                      <h3 className="mt-2 text-2xl font-semibold">{board.title}</h3>
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {board.columns.map((column) => (
+                          <span
+                            key={column.id}
+                            className="rounded-full border px-3 py-1 text-xs font-medium"
+                            style={{
+                              borderColor: "var(--panel-border)",
+                              background: "var(--chip-bg)",
+                              color: "var(--text-secondary)",
+                            }}
+                          >
+                            {column.title}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex w-full max-w-xs flex-col gap-4">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div
+                          className="rounded-2xl border p-4"
+                          style={{
+                            background: "var(--surface-3)",
+                            borderColor: "var(--panel-border)",
+                          }}
+                        >
+                          <p
+                            className="text-xs uppercase tracking-[0.18em]"
+                            style={{ color: "var(--text-muted)" }}
+                          >
+                            {copy.tasks}
+                          </p>
+                          <p className="mt-2 text-2xl font-semibold">
+                            {board._count.tasks}
+                          </p>
+                        </div>
+
+                        <div
+                          className="rounded-2xl border p-4"
+                          style={{
+                            background: "var(--surface-3)",
+                            borderColor: "var(--panel-border)",
+                          }}
+                        >
+                          <p
+                            className="text-xs uppercase tracking-[0.18em]"
+                            style={{ color: "var(--text-muted)" }}
+                          >
+                            {copy.tags}
+                          </p>
+                          <p className="mt-2 text-2xl font-semibold">
+                            {board._count.tags}
+                          </p>
+                        </div>
+                      </div>
+
+                      <Link
+                        to={`/boards/${board.id}`}
+                        className="rounded-2xl px-5 py-3 text-center text-sm font-semibold text-white shadow-lg transition hover:opacity-95"
+                        style={{
+                          background:
+                            "linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%)",
+                        }}
+                      >
+                        {copy.openBoard}
+                      </Link>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </SurfaceCard>
+      </div>
+    </AppShell>
   );
 }
 

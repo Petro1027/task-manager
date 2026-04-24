@@ -4,24 +4,23 @@ import { useForm } from "react-hook-form";
 import { Link, useNavigate } from "react-router-dom";
 import { z } from "zod";
 import { useAuth } from "../app/auth-context";
-import { API_BASE_URL } from "../lib/api";
+import { useLanguage } from "../app/language-context";
+import AuthPageShell from "../components/auth/AuthPageShell";
+import { apiUrl } from "../lib/api";
 
-const loginFormSchema = z.object({
-  email: z.string().trim().email("Adj meg egy érvényes email címet"),
-  password: z.string().min(1, "A jelszó megadása kötelező").max(100, "Túl hosszú jelszó"),
+const loginSchema = z.object({
+  email: z.string().trim().email("Valid email address is required."),
+  password: z.string().min(1, "Password is required."),
 });
 
-type LoginFormValues = z.infer<typeof loginFormSchema>;
+type LoginFormValues = z.infer<typeof loginSchema>;
 
 type LoginSuccessResponse = {
-  message: string;
   accessToken: string;
   user: {
     id: string;
     name: string;
     email: string;
-    createdAt: string;
-    updatedAt: string;
   };
 };
 
@@ -32,14 +31,83 @@ type ErrorResponse = {
 function LoginPage() {
   const navigate = useNavigate();
   const { setSession } = useAuth();
-  const [serverError, setServerError] = useState<string>("");
+  const { language } = useLanguage();
+  const [serverError, setServerError] = useState("");
+
+  const copy =
+    language === "hu"
+      ? {
+        badge: "Bejelentkezés",
+        title: "Üdv újra",
+        description:
+          "Lépj be a fiókodba, és folytasd a boardok, taskok és workflow-k kezelését.",
+        sideTitle: "Mit tud most az app?",
+        sideText:
+          "A jelenlegi verzióban már működik az auth, a board kezelés, a task létrehozás, a szerkesztő modal és a drag and drop mentés is.",
+        sideItems: [
+          "JWT alapú bejelentkezés",
+          "Board és task kezelés",
+          "Task szerkesztés modalból",
+          "Oszlopok közötti mozgatás",
+        ],
+        email: "Email",
+        password: "Jelszó",
+        submit: "Bejelentkezés",
+        pending: "Belépés...",
+        noAccount: "Még nincs fiókod?",
+        register: "Regisztráció",
+        backHome: "Vissza a főoldalra",
+        fallbackError: "Sikertelen bejelentkezés.",
+        networkError: "A szerver nem érhető el. Ellenőrizd, hogy fut-e a backend.",
+        emailRequired: "Adj meg egy érvényes email címet.",
+        passwordRequired: "A jelszó megadása kötelező.",
+        placeholders: {
+          email: "pelda@email.com",
+          password: "Írd be a jelszavad",
+        },
+      }
+      : {
+        badge: "Sign in",
+        title: "Welcome back",
+        description:
+          "Sign in to your account and continue managing boards, tasks, and workflows.",
+        sideTitle: "What the app can do now",
+        sideText:
+          "The current version already supports auth, board handling, task creation, modal editing, and persisted drag and drop.",
+        sideItems: [
+          "JWT based authentication",
+          "Board and task management",
+          "Task editing from modal",
+          "Cross-column task movement",
+        ],
+        email: "Email",
+        password: "Password",
+        submit: "Sign in",
+        pending: "Signing in...",
+        noAccount: "No account yet?",
+        register: "Register",
+        backHome: "Back to home",
+        fallbackError: "Login failed.",
+        networkError: "Server is not reachable. Check if the backend is running.",
+        emailRequired: "Valid email address is required.",
+        passwordRequired: "Password is required.",
+        placeholders: {
+          email: "example@email.com",
+          password: "Enter your password",
+        },
+      };
+
+  const localizedSchema = z.object({
+    email: z.string().trim().email(copy.emailRequired),
+    password: z.string().min(1, copy.passwordRequired),
+  });
 
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<LoginFormValues>({
-    resolver: zodResolver(loginFormSchema),
+    resolver: zodResolver(localizedSchema),
     defaultValues: {
       email: "",
       password: "",
@@ -50,7 +118,7 @@ function LoginPage() {
     setServerError("");
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+      const response = await fetch(apiUrl("/api/auth/login"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -58,14 +126,15 @@ function LoginPage() {
         body: JSON.stringify(values),
       });
 
-      if (!response.ok) {
-        const errorData = (await response.json()) as ErrorResponse;
+      const data = (await response.json()) as LoginSuccessResponse | ErrorResponse;
 
-        setServerError(errorData.message || "Sikertelen bejelentkezés.");
+      if (!response.ok) {
+        const errorMessage = "message" in data ? data.message : undefined;
+        setServerError(errorMessage || copy.fallbackError);
         return;
       }
 
-      const successData = (await response.json()) as LoginSuccessResponse;
+      const successData = data as LoginSuccessResponse;
 
       setSession({
         accessToken: successData.accessToken,
@@ -73,87 +142,118 @@ function LoginPage() {
       });
 
       navigate("/");
-    } catch {
-      setServerError("A szerver nem érhető el. Ellenőrizd, hogy fut-e a backend.");
+    } catch (error) {
+      console.error("Login error:", error);
+      setServerError(copy.networkError);
     }
   };
 
-  return (
-    <div className="min-h-screen bg-[#242424] px-4 py-12 text-[rgba(255,255,255,0.87)]">
-      <main className="mx-auto w-full max-w-xl">
-        <div className="rounded-3xl border border-[rgba(100,108,255,0.25)] bg-[#1a1a1a] p-8 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
-          <Link
-            to="/"
-            className="text-sm text-[#646cff] transition hover:text-[#535bf2]"
-          >
-            ← Vissza a főoldalra
-          </Link>
+  const form = (
+    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
+      <div>
+        <Link
+          to="/"
+          className="text-sm font-medium transition hover:opacity-80"
+          style={{ color: "var(--accent)" }}
+        >
+          ← {copy.backHome}
+        </Link>
+      </div>
 
-          <h1 className="mt-6 text-3xl font-semibold">Bejelentkezés</h1>
+      <div>
+        <label
+          className="mb-2 block text-sm font-medium"
+          style={{ color: "var(--text-primary)" }}
+        >
+          {copy.email}
+        </label>
+        <input
+          type="email"
+          {...register("email")}
+          placeholder={copy.placeholders.email}
+          className="w-full rounded-2xl border px-4 py-3 outline-none"
+          style={{
+            borderColor: "var(--panel-border)",
+            background: "var(--surface-3)",
+            color: "var(--text-primary)",
+          }}
+        />
+        {errors.email && (
+          <p className="mt-2 text-sm text-red-400">{errors.email.message}</p>
+        )}
+      </div>
 
-          <p className="mt-3 text-[rgba(255,255,255,0.72)]">
-            Itt már a valódi backend
-            <code className="mx-1 rounded bg-[#242424] px-2 py-1 text-sm text-[#646cff]">
-              /api/auth/login
-            </code>
-            endpointot használjuk.
-          </p>
+      <div>
+        <label
+          className="mb-2 block text-sm font-medium"
+          style={{ color: "var(--text-primary)" }}
+        >
+          {copy.password}
+        </label>
+        <input
+          type="password"
+          {...register("password")}
+          placeholder={copy.placeholders.password}
+          className="w-full rounded-2xl border px-4 py-3 outline-none"
+          style={{
+            borderColor: "var(--panel-border)",
+            background: "var(--surface-3)",
+            color: "var(--text-primary)",
+          }}
+        />
+        {errors.password && (
+          <p className="mt-2 text-sm text-red-400">{errors.password.message}</p>
+        )}
+      </div>
 
-          <form onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-5">
-            <div>
-              <label className="mb-2 block text-sm font-medium text-[rgba(255,255,255,0.8)]">
-                Email
-              </label>
-              <input
-                type="email"
-                {...register("email")}
-                className="w-full rounded-xl border border-[rgba(100,108,255,0.25)] bg-[#242424] px-4 py-3 outline-none transition focus:border-[#646cff]"
-                placeholder="pelda@email.com"
-              />
-              {errors.email && (
-                <p className="mt-2 text-sm text-red-400">{errors.email.message}</p>
-              )}
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-[rgba(255,255,255,0.8)]">
-                Jelszó
-              </label>
-              <input
-                type="password"
-                {...register("password")}
-                className="w-full rounded-xl border border-[rgba(100,108,255,0.25)] bg-[#242424] px-4 py-3 outline-none transition focus:border-[#646cff]"
-                placeholder="Add meg a jelszavad"
-              />
-              {errors.password && (
-                <p className="mt-2 text-sm text-red-400">{errors.password.message}</p>
-              )}
-            </div>
-
-            {serverError && (
-              <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-                {serverError}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full rounded-xl bg-[#646cff] px-5 py-3 font-medium text-white transition hover:bg-[#535bf2] disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {isSubmitting ? "Bejelentkezés..." : "Bejelentkezés"}
-            </button>
-          </form>
-
-          <p className="mt-6 text-sm text-[rgba(255,255,255,0.65)]">
-            Nincs még fiókod?{" "}
-            <Link to="/register" className="text-[#646cff] hover:text-[#535bf2]">
-              Regisztráció
-            </Link>
-          </p>
+      {serverError && (
+        <div
+          className="rounded-2xl border px-4 py-3 text-sm"
+          style={{
+            borderColor: "rgba(239, 68, 68, 0.28)",
+            background: "rgba(239, 68, 68, 0.1)",
+            color: "#fca5a5",
+          }}
+        >
+          {serverError}
         </div>
-      </main>
-    </div>
+      )}
+
+      <button
+        type="submit"
+        disabled={isSubmitting}
+        className="rounded-2xl px-5 py-3 text-sm font-semibold text-white shadow-lg transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-70"
+        style={{
+          background:
+            "linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%)",
+        }}
+      >
+        {isSubmitting ? copy.pending : copy.submit}
+      </button>
+
+      <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+        {copy.noAccount}{" "}
+        <Link
+          to="/register"
+          className="font-semibold transition hover:opacity-80"
+          style={{ color: "var(--accent)" }}
+        >
+          {copy.register}
+        </Link>
+      </p>
+    </form>
+  );
+
+  return (
+    <AuthPageShell
+      badge={copy.badge}
+      title={copy.title}
+      description={copy.description}
+      form={form}
+      sideTitle={copy.sideTitle}
+      sideText={copy.sideText}
+      sideItems={copy.sideItems}
+    />
   );
 }
 

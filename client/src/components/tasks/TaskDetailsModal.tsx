@@ -2,6 +2,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { useLanguage } from "../../app/language-context";
 import { apiUrl } from "../../lib/api";
 import { getAccessToken } from "../../lib/auth";
 
@@ -43,26 +44,40 @@ type TaskDetailsModalProps = {
   onSaved: (updatedTask: BoardTask) => Promise<void> | void;
 };
 
-const taskEditSchema = z.object({
-  title: z.string().trim().min(1, "A cím kötelező").max(200, "A cím túl hosszú"),
-  description: z.string().trim().max(5000, "A leírás túl hosszú").optional(),
-  priority: z.enum(["LOW", "MEDIUM", "HIGH"]),
-  category: z.string().trim().max(100, "A kategória túl hosszú").optional(),
-  dueDate: z.string().optional(),
-});
+type TaskEditValues = {
+  title: string;
+  description?: string;
+  priority: "LOW" | "MEDIUM" | "HIGH";
+  category?: string;
+  dueDate?: string;
+};
 
-type TaskEditValues = z.infer<typeof taskEditSchema>;
-
-function priorityBadgeClasses(priority: BoardTask["priority"]) {
+function priorityBadgeStyles(priority: BoardTask["priority"]) {
   switch (priority) {
     case "HIGH":
-      return "border-red-500/30 bg-red-500/10 text-red-300";
+      return {
+        borderColor: "rgba(239,68,68,0.28)",
+        background: "rgba(239,68,68,0.12)",
+        color: "#fca5a5",
+      };
     case "MEDIUM":
-      return "border-amber-500/30 bg-amber-500/10 text-amber-300";
+      return {
+        borderColor: "rgba(245,158,11,0.28)",
+        background: "rgba(245,158,11,0.12)",
+        color: "#fcd34d",
+      };
     case "LOW":
-      return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
+      return {
+        borderColor: "rgba(16,185,129,0.28)",
+        background: "rgba(16,185,129,0.12)",
+        color: "#86efac",
+      };
     default:
-      return "border-[rgba(100,108,255,0.25)] bg-[#242424] text-[rgba(255,255,255,0.75)]";
+      return {
+        borderColor: "var(--panel-border)",
+        background: "var(--chip-bg)",
+        color: "var(--text-secondary)",
+      };
   }
 }
 
@@ -86,7 +101,7 @@ async function updateTaskRequest(taskId: string, values: TaskEditValues) {
   const token = getAccessToken();
 
   if (!token) {
-    throw new Error("Hiányzik a hozzáférési token.");
+    throw new Error("Missing access token.");
   }
 
   const response = await fetch(apiUrl(`/api/tasks/${taskId}`), {
@@ -105,21 +120,90 @@ async function updateTaskRequest(taskId: string, values: TaskEditValues) {
   });
 
   if (response.status === 401) {
-    throw new Error("A munkamenet lejárt vagy érvénytelen. Jelentkezz be újra.");
+    throw new Error("Session expired or invalid.");
   }
 
   if (!response.ok) {
     const errorData = (await response.json()) as { message?: string };
-
-    throw new Error(errorData.message || "Nem sikerült menteni a taskot.");
+    throw new Error(errorData.message || "Failed to save task.");
   }
 
   return (await response.json()) as BoardTask;
 }
 
 function TaskDetailsModal({ task, onClose, onSaved }: TaskDetailsModalProps) {
+  const { language } = useLanguage();
   const [serverError, setServerError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+
+  const copy =
+    language === "hu"
+      ? {
+        badge: "Task szerkesztése",
+        close: "Bezárás",
+        title: "Cím",
+        description: "Leírás",
+        priority: "Prioritás",
+        dueDate: "Határidő",
+        category: "Kategória",
+        save: "Mentés",
+        saving: "Mentés...",
+        cancel: "Mégse",
+        meta: "Meta adatok",
+        tags: "Tagek",
+        noTags: "Ehhez a taskhoz még nincs tag.",
+        noDescription: "Nincs leírás megadva ehhez a taskhoz.",
+        archived: "Archivált",
+        taskId: "Task ID",
+        position: "Pozíció",
+        createdAt: "Létrehozva",
+        updatedAt: "Frissítve",
+        column: "Oszlop",
+        titleRequired: "A cím kötelező.",
+        titleTooLong: "A cím túl hosszú.",
+        descriptionTooLong: "A leírás túl hosszú.",
+        categoryTooLong: "A kategória túl hosszú.",
+        missingToken: "Hiányzik a hozzáférési token.",
+        sessionExpired: "A munkamenet lejárt vagy érvénytelen. Jelentkezz be újra.",
+        saveFallback: "Nem sikerült menteni a taskot.",
+      }
+      : {
+        badge: "Edit task",
+        close: "Close",
+        title: "Title",
+        description: "Description",
+        priority: "Priority",
+        dueDate: "Due date",
+        category: "Category",
+        save: "Save",
+        saving: "Saving...",
+        cancel: "Cancel",
+        meta: "Meta data",
+        tags: "Tags",
+        noTags: "There are no tags on this task yet.",
+        noDescription: "No description has been added for this task.",
+        archived: "Archived",
+        taskId: "Task ID",
+        position: "Position",
+        createdAt: "Created at",
+        updatedAt: "Updated at",
+        column: "Column",
+        titleRequired: "Title is required.",
+        titleTooLong: "Title is too long.",
+        descriptionTooLong: "Description is too long.",
+        categoryTooLong: "Category is too long.",
+        missingToken: "Missing access token.",
+        sessionExpired: "Session expired or invalid. Please sign in again.",
+        saveFallback: "Failed to save task.",
+      };
+
+  const localizedSchema = z.object({
+    title: z.string().trim().min(1, copy.titleRequired).max(200, copy.titleTooLong),
+    description: z.string().trim().max(5000, copy.descriptionTooLong).optional(),
+    priority: z.enum(["LOW", "MEDIUM", "HIGH"]),
+    category: z.string().trim().max(100, copy.categoryTooLong).optional(),
+    dueDate: z.string().optional(),
+  });
 
   const {
     register,
@@ -127,7 +211,7 @@ function TaskDetailsModal({ task, onClose, onSaved }: TaskDetailsModalProps) {
     reset,
     formState: { errors },
   } = useForm<TaskEditValues>({
-    resolver: zodResolver(taskEditSchema),
+    resolver: zodResolver(localizedSchema),
     defaultValues: {
       title: "",
       description: "",
@@ -149,6 +233,7 @@ function TaskDetailsModal({ task, onClose, onSaved }: TaskDetailsModalProps) {
       category: task.category ?? "",
       dueDate: formatDateTimeLocal(task.dueDate),
     });
+
     setServerError("");
   }, [reset, task]);
 
@@ -166,199 +251,325 @@ function TaskDetailsModal({ task, onClose, onSaved }: TaskDetailsModalProps) {
       onClose();
     } catch (error) {
       if (error instanceof Error) {
-        setServerError(error.message);
+        if (error.message === "Missing access token.") {
+          setServerError(copy.missingToken);
+        } else if (error.message === "Session expired or invalid.") {
+          setServerError(copy.sessionExpired);
+        } else if (error.message === "Failed to save task.") {
+          setServerError(copy.saveFallback);
+        } else {
+          setServerError(error.message);
+        }
       } else {
-        setServerError("Nem sikerült menteni a taskot.");
+        setServerError(copy.saveFallback);
       }
     } finally {
       setIsSaving(false);
     }
   };
 
+  const priorityStyles = priorityBadgeStyles(task.priority);
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6"
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 px-4 py-6 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-[rgba(100,108,255,0.25)] bg-[#1a1a1a] p-6 shadow-[0_20px_80px_rgba(0,0,0,0.45)]"
+        className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-[30px] border p-6 md:p-8"
         onClick={(event) => event.stopPropagation()}
+        style={{
+          background: "var(--surface-1)",
+          borderColor: "var(--panel-border)",
+          boxShadow: "var(--panel-shadow)",
+        }}
       >
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.2em] text-[#646cff]">
-              Task szerkesztése
+            <p
+              className="text-xs uppercase tracking-[0.22em]"
+              style={{ color: "var(--accent)" }}
+            >
+              {copy.badge}
             </p>
-            <h2 className="mt-2 text-2xl font-semibold">{task.title}</h2>
+
+            <h2 className="mt-3 text-3xl font-semibold" style={{ color: "var(--text-primary)" }}>
+              {task.title}
+            </h2>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span
+                className="rounded-full border px-3 py-1 text-xs font-medium"
+                style={priorityStyles}
+              >
+                {task.priority}
+              </span>
+
+              <span
+                className="rounded-full border px-3 py-1 text-xs font-medium"
+                style={{
+                  borderColor: "var(--panel-border)",
+                  background: "var(--chip-bg)",
+                  color: "var(--text-secondary)",
+                }}
+              >
+                {copy.column}: {task.column.title}
+              </span>
+
+              {task.archived && (
+                <span
+                  className="rounded-full border px-3 py-1 text-xs font-medium"
+                  style={{
+                    borderColor: "var(--panel-border)",
+                    background: "var(--chip-bg)",
+                    color: "var(--text-secondary)",
+                  }}
+                >
+                  {copy.archived}
+                </span>
+              )}
+            </div>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl border border-[rgba(100,108,255,0.25)] px-3 py-2 text-sm text-[rgba(255,255,255,0.78)] transition hover:border-[rgba(100,108,255,0.45)]"
+            className="rounded-2xl border px-4 py-3 text-sm font-medium transition hover:opacity-90"
+            style={{
+              borderColor: "var(--panel-border)",
+              background: "var(--chip-bg)",
+              color: "var(--text-primary)",
+            }}
           >
-            Bezárás
+            {copy.close}
           </button>
         </div>
 
-        <div className="mt-6 flex flex-wrap gap-2">
-          <span
-            className={`rounded-full border px-3 py-1 text-xs font-medium ${priorityBadgeClasses(task.priority)}`}
+        <form onSubmit={handleSubmit(onSubmit)} className="mt-8 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+          <div
+            className="rounded-[28px] border p-6"
+            style={{
+              background: "var(--surface-2)",
+              borderColor: "var(--panel-border)",
+            }}
           >
-            {task.priority}
-          </span>
+            <div className="grid gap-5">
+              <div>
+                <label
+                  className="mb-2 block text-sm font-medium"
+                  style={{ color: "var(--text-primary)" }}
+                >
+                  {copy.title}
+                </label>
+                <input
+                  type="text"
+                  {...register("title")}
+                  className="w-full rounded-2xl border px-4 py-3 outline-none"
+                  style={{
+                    borderColor: "var(--panel-border)",
+                    background: "var(--surface-3)",
+                    color: "var(--text-primary)",
+                  }}
+                />
+                {errors.title && (
+                  <p className="mt-2 text-sm text-red-400">{errors.title.message}</p>
+                )}
+              </div>
 
-          <span className="rounded-full border border-[rgba(100,108,255,0.2)] bg-[#242424] px-3 py-1 text-xs text-[rgba(255,255,255,0.78)]">
-            {task.column.title}
-          </span>
+              <div>
+                <label
+                  className="mb-2 block text-sm font-medium"
+                  style={{ color: "var(--text-primary)" }}
+                >
+                  {copy.description}
+                </label>
+                <textarea
+                  {...register("description")}
+                  rows={6}
+                  className="w-full rounded-2xl border px-4 py-3 outline-none"
+                  style={{
+                    borderColor: "var(--panel-border)",
+                    background: "var(--surface-3)",
+                    color: "var(--text-primary)",
+                  }}
+                />
+                {errors.description && (
+                  <p className="mt-2 text-sm text-red-400">{errors.description.message}</p>
+                )}
+              </div>
 
-          {task.archived && (
-            <span className="rounded-full border border-slate-500/30 bg-slate-500/10 px-3 py-1 text-xs text-slate-300">
-              Archivált
-            </span>
-          )}
-        </div>
-
-        <form onSubmit={handleSubmit(onSubmit)} className="mt-6 grid gap-4 md:grid-cols-2">
-          <div className="md:col-span-2">
-            <label className="mb-2 block text-sm font-medium text-[rgba(255,255,255,0.82)]">
-              Cím
-            </label>
-            <input
-              type="text"
-              {...register("title")}
-              className="w-full rounded-xl border border-[rgba(100,108,255,0.25)] bg-[#242424] px-4 py-3 outline-none transition focus:border-[#646cff]"
-            />
-            {errors.title && (
-              <p className="mt-2 text-sm text-red-400">{errors.title.message}</p>
-            )}
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="mb-2 block text-sm font-medium text-[rgba(255,255,255,0.82)]">
-              Leírás
-            </label>
-            <textarea
-              {...register("description")}
-              rows={5}
-              className="w-full rounded-xl border border-[rgba(100,108,255,0.25)] bg-[#242424] px-4 py-3 outline-none transition focus:border-[#646cff]"
-            />
-            {errors.description && (
-              <p className="mt-2 text-sm text-red-400">{errors.description.message}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-medium text-[rgba(255,255,255,0.82)]">
-              Prioritás
-            </label>
-            <select
-              {...register("priority")}
-              className="w-full rounded-xl border border-[rgba(100,108,255,0.25)] bg-[#242424] px-4 py-3 outline-none transition focus:border-[#646cff]"
-            >
-              <option value="LOW">LOW</option>
-              <option value="MEDIUM">MEDIUM</option>
-              <option value="HIGH">HIGH</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-medium text-[rgba(255,255,255,0.82)]">
-              Határidő
-            </label>
-            <input
-              type="datetime-local"
-              {...register("dueDate")}
-              className="w-full rounded-xl border border-[rgba(100,108,255,0.25)] bg-[#242424] px-4 py-3 outline-none transition focus:border-[#646cff]"
-            />
-            {errors.dueDate && (
-              <p className="mt-2 text-sm text-red-400">{errors.dueDate.message}</p>
-            )}
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="mb-2 block text-sm font-medium text-[rgba(255,255,255,0.82)]">
-              Kategória
-            </label>
-            <input
-              type="text"
-              {...register("category")}
-              className="w-full rounded-xl border border-[rgba(100,108,255,0.25)] bg-[#242424] px-4 py-3 outline-none transition focus:border-[#646cff]"
-            />
-            {errors.category && (
-              <p className="mt-2 text-sm text-red-400">{errors.category.message}</p>
-            )}
-          </div>
-
-          {serverError && (
-            <div className="md:col-span-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-              {serverError}
-            </div>
-          )}
-
-          <div className="md:col-span-2 flex flex-wrap gap-3">
-            <button
-              type="submit"
-              disabled={isSaving}
-              className="rounded-xl bg-[#646cff] px-5 py-3 font-medium text-white transition hover:bg-[#535bf2] disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {isSaving ? "Mentés..." : "Mentés"}
-            </button>
-
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-xl border border-[rgba(100,108,255,0.25)] px-5 py-3 font-medium text-[rgba(255,255,255,0.82)] transition hover:border-[rgba(100,108,255,0.45)]"
-            >
-              Mégse
-            </button>
-          </div>
-        </form>
-
-        <section className="mt-6 grid gap-4 md:grid-cols-2">
-          <div className="rounded-2xl bg-[#242424] p-5">
-            <h3 className="text-lg font-medium">Meta adatok</h3>
-
-            <div className="mt-4 space-y-3 text-sm text-[rgba(255,255,255,0.72)]">
-              <p>
-                <span className="text-[rgba(255,255,255,0.5)]">Task ID:</span> {task.id}
-              </p>
-              <p>
-                <span className="text-[rgba(255,255,255,0.5)]">Pozíció:</span> {task.position}
-              </p>
-              <p>
-                <span className="text-[rgba(255,255,255,0.5)]">Létrehozva:</span>{" "}
-                {new Date(task.createdAt).toLocaleString("hu-HU")}
-              </p>
-              <p>
-                <span className="text-[rgba(255,255,255,0.5)]">Frissítve:</span>{" "}
-                {new Date(task.updatedAt).toLocaleString("hu-HU")}
-              </p>
-            </div>
-          </div>
-
-          <div className="rounded-2xl bg-[#242424] p-5">
-            <h3 className="text-lg font-medium">Tagek</h3>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              {task.taskTags.length === 0 ? (
-                <p className="text-sm text-[rgba(255,255,255,0.6)]">
-                  Ehhez a taskhoz még nincs tag.
-                </p>
-              ) : (
-                task.taskTags.map((taskTag) => (
-                  <span
-                    key={taskTag.tag.id}
-                    className="rounded-full px-3 py-1 text-xs text-white"
-                    style={{ backgroundColor: taskTag.tag.color }}
+              <div className="grid gap-5 md:grid-cols-2">
+                <div>
+                  <label
+                    className="mb-2 block text-sm font-medium"
+                    style={{ color: "var(--text-primary)" }}
                   >
-                    {taskTag.tag.name}
-                  </span>
-                ))
+                    {copy.priority}
+                  </label>
+                  <select
+                    {...register("priority")}
+                    className="w-full rounded-2xl border px-4 py-3 outline-none"
+                    style={{
+                      borderColor: "var(--panel-border)",
+                      background: "var(--surface-3)",
+                      color: "var(--text-primary)",
+                    }}
+                  >
+                    <option value="LOW">LOW</option>
+                    <option value="MEDIUM">MEDIUM</option>
+                    <option value="HIGH">HIGH</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label
+                    className="mb-2 block text-sm font-medium"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    {copy.dueDate}
+                  </label>
+                  <input
+                    type="datetime-local"
+                    {...register("dueDate")}
+                    className="w-full rounded-2xl border px-4 py-3 outline-none"
+                    style={{
+                      borderColor: "var(--panel-border)",
+                      background: "var(--surface-3)",
+                      color: "var(--text-primary)",
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label
+                  className="mb-2 block text-sm font-medium"
+                  style={{ color: "var(--text-primary)" }}
+                >
+                  {copy.category}
+                </label>
+                <input
+                  type="text"
+                  {...register("category")}
+                  className="w-full rounded-2xl border px-4 py-3 outline-none"
+                  style={{
+                    borderColor: "var(--panel-border)",
+                    background: "var(--surface-3)",
+                    color: "var(--text-primary)",
+                  }}
+                />
+                {errors.category && (
+                  <p className="mt-2 text-sm text-red-400">{errors.category.message}</p>
+                )}
+              </div>
+
+              {serverError && (
+                <div
+                  className="rounded-2xl border px-4 py-3 text-sm"
+                  style={{
+                    borderColor: "rgba(239, 68, 68, 0.28)",
+                    background: "rgba(239, 68, 68, 0.1)",
+                    color: "#fca5a5",
+                  }}
+                >
+                  {serverError}
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="rounded-2xl px-5 py-3 text-sm font-semibold text-white shadow-lg transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-70"
+                  style={{
+                    background:
+                      "linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%)",
+                  }}
+                >
+                  {isSaving ? copy.saving : copy.save}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="rounded-2xl border px-5 py-3 text-sm font-semibold transition hover:opacity-90"
+                  style={{
+                    borderColor: "var(--panel-border)",
+                    background: "var(--chip-bg)",
+                    color: "var(--text-primary)",
+                  }}
+                >
+                  {copy.cancel}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-6">
+            <div
+              className="rounded-[28px] border p-6"
+              style={{
+                background: "var(--surface-2)",
+                borderColor: "var(--panel-border)",
+              }}
+            >
+              <h3 className="text-xl font-semibold">{copy.meta}</h3>
+
+              <div className="mt-5 space-y-3 text-sm" style={{ color: "var(--text-secondary)" }}>
+                <p>
+                  <span style={{ color: "var(--text-muted)" }}>{copy.taskId}:</span>{" "}
+                  {task.id}
+                </p>
+                <p>
+                  <span style={{ color: "var(--text-muted)" }}>{copy.position}:</span>{" "}
+                  {task.position}
+                </p>
+                <p>
+                  <span style={{ color: "var(--text-muted)" }}>{copy.createdAt}:</span>{" "}
+                  {new Date(task.createdAt).toLocaleString(language === "hu" ? "hu-HU" : "en-GB")}
+                </p>
+                <p>
+                  <span style={{ color: "var(--text-muted)" }}>{copy.updatedAt}:</span>{" "}
+                  {new Date(task.updatedAt).toLocaleString(language === "hu" ? "hu-HU" : "en-GB")}
+                </p>
+              </div>
+            </div>
+
+            <div
+              className="rounded-[28px] border p-6"
+              style={{
+                background: "var(--surface-2)",
+                borderColor: "var(--panel-border)",
+              }}
+            >
+              <h3 className="text-xl font-semibold">{copy.tags}</h3>
+
+              <div className="mt-5 flex flex-wrap gap-2">
+                {task.taskTags.length === 0 ? (
+                  <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+                    {copy.noTags}
+                  </p>
+                ) : (
+                  task.taskTags.map((taskTag) => (
+                    <span
+                      key={taskTag.tag.id}
+                      className="rounded-full px-3 py-1 text-xs font-medium text-white"
+                      style={{ backgroundColor: taskTag.tag.color }}
+                    >
+                      {taskTag.tag.name}
+                    </span>
+                  ))
+                )}
+              </div>
+
+              {!task.description && (
+                <p className="mt-5 text-sm" style={{ color: "var(--text-muted)" }}>
+                  {copy.noDescription}
+                </p>
               )}
             </div>
           </div>
-        </section>
+        </form>
       </div>
     </div>
   );

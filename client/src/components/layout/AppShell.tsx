@@ -7,7 +7,7 @@ type AppShellProps = {
 function AppShell({ children }: AppShellProps) {
   return (
     <div
-      className="min-h-screen px-4 py-6 md:px-6 md:py-8"
+      className="min-h-screen px-4 py-8 md:px-6"
       style={{
         color: "var(--text-primary)",
       }}
@@ -27,7 +27,7 @@ function AppShell({ children }: AppShellProps) {
         />
       </div>
 
-      <main className="relative mx-auto flex w-full max-w-6xl flex-col gap-8 pt-28 md:pt-6">
+      <main className="relative mx-auto flex w-full max-w-7xl flex-col gap-8">
         {children}
       </main>
     </div>

@@ -41,13 +41,29 @@ type SortableTaskCardProps = {
 function priorityBadgeClasses(priority: BoardTask["priority"]) {
   switch (priority) {
     case "HIGH":
-      return "border-red-500/30 bg-red-500/10 text-red-300";
+      return {
+        borderColor: "rgba(239,68,68,0.28)",
+        background: "rgba(239,68,68,0.12)",
+        color: "#fca5a5",
+      };
     case "MEDIUM":
-      return "border-amber-500/30 bg-amber-500/10 text-amber-300";
+      return {
+        borderColor: "rgba(245,158,11,0.28)",
+        background: "rgba(245,158,11,0.12)",
+        color: "#fcd34d",
+      };
     case "LOW":
-      return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
+      return {
+        borderColor: "rgba(16,185,129,0.28)",
+        background: "rgba(16,185,129,0.12)",
+        color: "#86efac",
+      };
     default:
-      return "border-[rgba(100,108,255,0.25)] bg-[#242424] text-[rgba(255,255,255,0.75)]";
+      return {
+        borderColor: "var(--panel-border)",
+        background: "var(--chip-bg)",
+        color: "var(--text-secondary)",
+      };
   }
 }
 
@@ -67,6 +83,8 @@ function SortableTaskCard({ task, onClick }: SortableTaskCardProps) {
     transition,
   };
 
+  const priorityStyles = priorityBadgeClasses(task.priority);
+
   return (
     <button
       ref={setNodeRef}
@@ -75,47 +93,83 @@ function SortableTaskCard({ task, onClick }: SortableTaskCardProps) {
       onClick={onClick}
       {...attributes}
       {...listeners}
-      className={`rounded-2xl border border-[rgba(100,108,255,0.18)] bg-[#242424] p-4 text-left transition hover:border-[rgba(100,108,255,0.35)] hover:bg-[#2a2a2a] ${
-        isDragging ? "opacity-60 shadow-2xl" : ""
-      }`}
+      className="rounded-[24px] border p-4 text-left transition hover:-translate-y-0.5"
+      title={task.title}
     >
-      <div className="flex items-start justify-between gap-3">
-        <h3 className="text-lg font-medium">{task.title}</h3>
-        <span
-          className={`rounded-full border px-3 py-1 text-xs font-medium ${priorityBadgeClasses(task.priority)}`}
-        >
-          {task.priority}
-        </span>
-      </div>
+      <div
+        style={{
+          borderRadius: "24px",
+          border: "1px solid var(--panel-border)",
+          background: "var(--surface-3)",
+          padding: "0",
+          boxShadow: isDragging ? "0 18px 40px rgba(0,0,0,0.22)" : "none",
+          opacity: isDragging ? 0.72 : 1,
+        }}
+      >
+        <div className="p-4">
+          <div className="flex items-start justify-between gap-3">
+            <h3
+              className="text-lg font-semibold"
+              style={{ color: "var(--text-primary)" }}
+            >
+              {task.title}
+            </h3>
 
-      {task.description && (
-        <p className="mt-3 text-sm leading-6 text-[rgba(255,255,255,0.72)]">
-          {task.description}
-        </p>
-      )}
+            <span
+              className="rounded-full border px-3 py-1 text-xs font-medium"
+              style={priorityStyles}
+            >
+              {task.priority}
+            </span>
+          </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        {task.category && (
-          <span className="rounded-full border border-[rgba(100,108,255,0.2)] px-3 py-1 text-xs text-[rgba(255,255,255,0.72)]">
-            {task.category}
-          </span>
-        )}
+          {task.description && (
+            <p
+              className="mt-3 text-sm leading-6"
+              style={{ color: "var(--text-secondary)" }}
+            >
+              {task.description}
+            </p>
+          )}
 
-        {task.dueDate && (
-          <span className="rounded-full border border-[rgba(100,108,255,0.2)] px-3 py-1 text-xs text-[rgba(255,255,255,0.72)]">
-            Határidő: {new Date(task.dueDate).toLocaleDateString("hu-HU")}
-          </span>
-        )}
+          <div className="mt-4 flex flex-wrap gap-2">
+            {task.category && (
+              <span
+                className="rounded-full border px-3 py-1 text-xs font-medium"
+                style={{
+                  borderColor: "var(--panel-border)",
+                  background: "var(--chip-bg)",
+                  color: "var(--text-secondary)",
+                }}
+              >
+                {task.category}
+              </span>
+            )}
 
-        {task.taskTags.map((taskTag) => (
-          <span
-            key={taskTag.tag.id}
-            className="rounded-full px-3 py-1 text-xs text-white"
-            style={{ backgroundColor: taskTag.tag.color }}
-          >
-            {taskTag.tag.name}
-          </span>
-        ))}
+            {task.dueDate && (
+              <span
+                className="rounded-full border px-3 py-1 text-xs font-medium"
+                style={{
+                  borderColor: "var(--panel-border)",
+                  background: "var(--chip-bg)",
+                  color: "var(--text-secondary)",
+                }}
+              >
+                {new Date(task.dueDate).toLocaleDateString("hu-HU")}
+              </span>
+            )}
+
+            {task.taskTags.map((taskTag) => (
+              <span
+                key={taskTag.tag.id}
+                className="rounded-full px-3 py-1 text-xs font-medium text-white"
+                style={{ backgroundColor: taskTag.tag.color }}
+              >
+                {taskTag.tag.name}
+              </span>
+            ))}
+          </div>
+        </div>
       </div>
     </button>
   );

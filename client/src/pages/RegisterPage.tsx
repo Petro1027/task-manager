@@ -1,26 +1,19 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { z } from "zod";
-import { API_BASE_URL } from "../lib/api";
-
-const registerFormSchema = z.object({
-  name: z.string().trim().min(2, "A név legalább 2 karakter legyen").max(100, "Túl hosszú név"),
-  email: z.string().trim().email("Adj meg egy érvényes email címet"),
-  password: z.string().min(8, "A jelszó legalább 8 karakter legyen").max(100, "Túl hosszú jelszó"),
-});
-
-type RegisterFormValues = z.infer<typeof registerFormSchema>;
+import { useAuth } from "../app/auth-context";
+import { useLanguage } from "../app/language-context";
+import AuthPageShell from "../components/auth/AuthPageShell";
+import { apiUrl } from "../lib/api";
 
 type RegisterSuccessResponse = {
-  message: string;
+  accessToken: string;
   user: {
     id: string;
     name: string;
     email: string;
-    createdAt: string;
-    updatedAt: string;
   };
 };
 
@@ -29,16 +22,94 @@ type ErrorResponse = {
 };
 
 function RegisterPage() {
-  const [serverError, setServerError] = useState<string>("");
-  const [successMessage, setSuccessMessage] = useState<string>("");
+  const navigate = useNavigate();
+  const { setSession } = useAuth();
+  const { language } = useLanguage();
+  const [serverError, setServerError] = useState("");
+
+  const copy =
+    language === "hu"
+      ? {
+        badge: "Regisztráció",
+        title: "Készíts új fiókot",
+        description:
+          "Hozz létre saját profilt, és kezdd el kezelni a boardjaidat, taskjaidat és workflow-jaidat.",
+        sideTitle: "Miért hasznos ez a projekt?",
+        sideText:
+          "Ez a portfólióprojekt több modern frontend és backend technológiát fog össze egy működő, valós használati mintájú alkalmazásban.",
+        sideItems: [
+          "React + TypeScript frontend",
+          "Node + Express backend",
+          "PostgreSQL + Prisma adatbázis",
+          "Auth, Kanban, drag and drop",
+        ],
+        name: "Név",
+        email: "Email",
+        password: "Jelszó",
+        submit: "Regisztráció",
+        pending: "Regisztráció...",
+        hasAccount: "Van már fiókod?",
+        login: "Bejelentkezés",
+        backHome: "Vissza a főoldalra",
+        fallbackError: "Sikertelen regisztráció.",
+        networkError: "A szerver nem érhető el. Ellenőrizd, hogy fut-e a backend.",
+        nameRequired: "A név megadása kötelező.",
+        emailRequired: "Adj meg egy érvényes email címet.",
+        passwordRequired: "A jelszónak legalább 6 karakter hosszúnak kell lennie.",
+        placeholders: {
+          name: "Példa Elek",
+          email: "pelda@email.com",
+          password: "Legalább 6 karakter",
+        },
+      }
+      : {
+        badge: "Register",
+        title: "Create a new account",
+        description:
+          "Create your own profile and start managing your boards, tasks, and workflows.",
+        sideTitle: "Why this project matters",
+        sideText:
+          "This portfolio project combines multiple modern frontend and backend technologies into a working app with realistic usage patterns.",
+        sideItems: [
+          "React + TypeScript frontend",
+          "Node + Express backend",
+          "PostgreSQL + Prisma database",
+          "Auth, Kanban, drag and drop",
+        ],
+        name: "Name",
+        email: "Email",
+        password: "Password",
+        submit: "Register",
+        pending: "Registering...",
+        hasAccount: "Already have an account?",
+        login: "Sign in",
+        backHome: "Back to home",
+        fallbackError: "Registration failed.",
+        networkError: "Server is not reachable. Check if the backend is running.",
+        nameRequired: "Name is required.",
+        emailRequired: "Valid email address is required.",
+        passwordRequired: "Password must be at least 6 characters long.",
+        placeholders: {
+          name: "John Example",
+          email: "example@email.com",
+          password: "At least 6 characters",
+        },
+      };
+
+  const localizedSchema = z.object({
+    name: z.string().trim().min(1, copy.nameRequired),
+    email: z.string().trim().email(copy.emailRequired),
+    password: z.string().min(6, copy.passwordRequired),
+  });
+
+  type RegisterFormValues = z.infer<typeof localizedSchema>;
 
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-    reset,
   } = useForm<RegisterFormValues>({
-    resolver: zodResolver(registerFormSchema),
+    resolver: zodResolver(localizedSchema),
     defaultValues: {
       name: "",
       email: "",
@@ -48,124 +119,167 @@ function RegisterPage() {
 
   const onSubmit = async (values: RegisterFormValues) => {
     setServerError("");
-    setSuccessMessage("");
 
-    const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(values),
-    });
+    try {
+      const response = await fetch(apiUrl("/api/auth/register"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(values),
+      });
 
-    const data = (await response.json()) as RegisterSuccessResponse | ErrorResponse;
+      const data = (await response.json()) as RegisterSuccessResponse | ErrorResponse;
 
-    if (!response.ok) {
-      setServerError(data.message || "Sikertelen regisztráció.");
-      return;
+      if (!response.ok) {
+        const errorMessage = "message" in data ? data.message : undefined;
+        setServerError(errorMessage || copy.fallbackError);
+        return;
+      }
+
+      const successData = data as RegisterSuccessResponse;
+
+      setSession({
+        accessToken: successData.accessToken,
+        user: successData.user,
+      });
+
+      navigate("/");
+    } catch (error) {
+      console.error("Register error:", error);
+      setServerError(copy.networkError);
     }
-
-    setSuccessMessage("Sikeres regisztráció. Most már be tudsz jelentkezni.");
-    reset();
   };
 
-  return (
-    <div className="min-h-screen bg-[#242424] px-4 py-12 text-[rgba(255,255,255,0.87)]">
-      <main className="mx-auto w-full max-w-xl">
-        <div className="rounded-3xl border border-[rgba(100,108,255,0.25)] bg-[#1a1a1a] p-8 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
-          <Link
-            to="/"
-            className="text-sm text-[#646cff] transition hover:text-[#535bf2]"
-          >
-            ← Vissza a főoldalra
-          </Link>
+  const form = (
+    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
+      <div>
+        <Link
+          to="/"
+          className="text-sm font-medium transition hover:opacity-80"
+          style={{ color: "var(--accent)" }}
+        >
+          ← {copy.backHome}
+        </Link>
+      </div>
 
-          <h1 className="mt-6 text-3xl font-semibold">Regisztráció</h1>
+      <div>
+        <label
+          className="mb-2 block text-sm font-medium"
+          style={{ color: "var(--text-primary)" }}
+        >
+          {copy.name}
+        </label>
+        <input
+          type="text"
+          {...register("name")}
+          placeholder={copy.placeholders.name}
+          className="w-full rounded-2xl border px-4 py-3 outline-none"
+          style={{
+            borderColor: "var(--panel-border)",
+            background: "var(--surface-3)",
+            color: "var(--text-primary)",
+          }}
+        />
+        {errors.name && (
+          <p className="mt-2 text-sm text-red-400">{errors.name.message}</p>
+        )}
+      </div>
 
-          <p className="mt-3 text-[rgba(255,255,255,0.72)]">
-            Itt már a valódi backend
-            <code className="mx-1 rounded bg-[#242424] px-2 py-1 text-sm text-[#646cff]">
-              /api/auth/register
-            </code>
-            endpointot használjuk.
-          </p>
+      <div>
+        <label
+          className="mb-2 block text-sm font-medium"
+          style={{ color: "var(--text-primary)" }}
+        >
+          {copy.email}
+        </label>
+        <input
+          type="email"
+          {...register("email")}
+          placeholder={copy.placeholders.email}
+          className="w-full rounded-2xl border px-4 py-3 outline-none"
+          style={{
+            borderColor: "var(--panel-border)",
+            background: "var(--surface-3)",
+            color: "var(--text-primary)",
+          }}
+        />
+        {errors.email && (
+          <p className="mt-2 text-sm text-red-400">{errors.email.message}</p>
+        )}
+      </div>
 
-          <form onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-5">
-            <div>
-              <label className="mb-2 block text-sm font-medium text-[rgba(255,255,255,0.8)]">
-                Név
-              </label>
-              <input
-                type="text"
-                {...register("name")}
-                className="w-full rounded-xl border border-[rgba(100,108,255,0.25)] bg-[#242424] px-4 py-3 outline-none transition focus:border-[#646cff]"
-                placeholder="Például: Teszt Béla"
-              />
-              {errors.name && (
-                <p className="mt-2 text-sm text-red-400">{errors.name.message}</p>
-              )}
-            </div>
+      <div>
+        <label
+          className="mb-2 block text-sm font-medium"
+          style={{ color: "var(--text-primary)" }}
+        >
+          {copy.password}
+        </label>
+        <input
+          type="password"
+          {...register("password")}
+          placeholder={copy.placeholders.password}
+          className="w-full rounded-2xl border px-4 py-3 outline-none"
+          style={{
+            borderColor: "var(--panel-border)",
+            background: "var(--surface-3)",
+            color: "var(--text-primary)",
+          }}
+        />
+        {errors.password && (
+          <p className="mt-2 text-sm text-red-400">{errors.password.message}</p>
+        )}
+      </div>
 
-            <div>
-              <label className="mb-2 block text-sm font-medium text-[rgba(255,255,255,0.8)]">
-                Email
-              </label>
-              <input
-                type="email"
-                {...register("email")}
-                className="w-full rounded-xl border border-[rgba(100,108,255,0.25)] bg-[#242424] px-4 py-3 outline-none transition focus:border-[#646cff]"
-                placeholder="pelda@email.com"
-              />
-              {errors.email && (
-                <p className="mt-2 text-sm text-red-400">{errors.email.message}</p>
-              )}
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-[rgba(255,255,255,0.8)]">
-                Jelszó
-              </label>
-              <input
-                type="password"
-                {...register("password")}
-                className="w-full rounded-xl border border-[rgba(100,108,255,0.25)] bg-[#242424] px-4 py-3 outline-none transition focus:border-[#646cff]"
-                placeholder="Legalább 8 karakter"
-              />
-              {errors.password && (
-                <p className="mt-2 text-sm text-red-400">{errors.password.message}</p>
-              )}
-            </div>
-
-            {serverError && (
-              <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-                {serverError}
-              </div>
-            )}
-
-            {successMessage && (
-              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
-                {successMessage}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full rounded-xl bg-[#646cff] px-5 py-3 font-medium text-white transition hover:bg-[#535bf2] disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {isSubmitting ? "Regisztráció..." : "Regisztráció"}
-            </button>
-          </form>
-
-          <p className="mt-6 text-sm text-[rgba(255,255,255,0.65)]">
-            Van már fiókod?{" "}
-            <Link to="/login" className="text-[#646cff] hover:text-[#535bf2]">
-              Bejelentkezés
-            </Link>
-          </p>
+      {serverError && (
+        <div
+          className="rounded-2xl border px-4 py-3 text-sm"
+          style={{
+            borderColor: "rgba(239, 68, 68, 0.28)",
+            background: "rgba(239, 68, 68, 0.1)",
+            color: "#fca5a5",
+          }}
+        >
+          {serverError}
         </div>
-      </main>
-    </div>
+      )}
+
+      <button
+        type="submit"
+        disabled={isSubmitting}
+        className="rounded-2xl px-5 py-3 text-sm font-semibold text-white shadow-lg transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-70"
+        style={{
+          background:
+            "linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%)",
+        }}
+      >
+        {isSubmitting ? copy.pending : copy.submit}
+      </button>
+
+      <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+        {copy.hasAccount}{" "}
+        <Link
+          to="/login"
+          className="font-semibold transition hover:opacity-80"
+          style={{ color: "var(--accent)" }}
+        >
+          {copy.login}
+        </Link>
+      </p>
+    </form>
+  );
+
+  return (
+    <AuthPageShell
+      badge={copy.badge}
+      title={copy.title}
+      description={copy.description}
+      form={form}
+      sideTitle={copy.sideTitle}
+      sideText={copy.sideText}
+      sideItems={copy.sideItems}
+    />
   );
 }
 

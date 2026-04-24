@@ -19,7 +19,10 @@ import {
 type AuthContextValue = {
   authUser: AuthUser | null;
   isAuthReady: boolean;
-  setSession: (input: { accessToken: string; user: AuthUser }) => void;
+  setSession: (input: {
+    accessToken: string;
+    user: { id: string; name: string; email: string }
+  }) => void;
   logout: () => void;
 };
 

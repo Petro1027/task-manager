@@ -1,3 +1,4 @@
+import React from "react";
 import { useLanguage } from "../../app/language-context";
 import { useTheme } from "../../app/theme-context";
 
@@ -80,7 +81,7 @@ function OptionButton({ active, onClick, icon, label }: OptionButtonProps) {
         transition: "all 180ms ease",
         fontSize: "14px",
         fontWeight: 600,
-        minWidth: "120px",
+        minWidth: "118px",
         justifyContent: "flex-start",
       }}
       onMouseEnter={(event) => {
@@ -111,6 +112,33 @@ function OptionButton({ active, onClick, icon, label }: OptionButtonProps) {
   );
 }
 
+function PreferenceGroup({
+                           title,
+                           children,
+                         }: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+      <div
+        style={{
+          minWidth: "92px",
+          fontSize: "11px",
+          textTransform: "uppercase",
+          letterSpacing: "0.18em",
+          color: "var(--text-muted)",
+          fontWeight: 700,
+        }}
+      >
+        {title}
+      </div>
+
+      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>{children}</div>
+    </div>
+  );
+}
+
 function GlobalPreferencesPanel() {
   const { language, setLanguage, t } = useLanguage();
   const { theme, setTheme } = useTheme();
@@ -118,102 +146,63 @@ function GlobalPreferencesPanel() {
   return (
     <div
       style={{
-        position: "fixed",
-        top: "16px",
-        right: "16px",
-        zIndex: 2000,
-        width: "min(360px, calc(100vw - 32px))",
+        display: "flex",
+        flexDirection: "column",
+        gap: "10px",
+        width: "100%",
       }}
     >
       <div
         style={{
-          background: "var(--panel-bg)",
-          border: "1px solid var(--panel-border)",
-          boxShadow: "var(--panel-shadow)",
-          backdropFilter: "blur(14px)",
-          borderRadius: "24px",
-          padding: "16px",
-          color: "var(--text-primary)",
+          fontSize: "11px",
+          textTransform: "uppercase",
+          letterSpacing: "0.22em",
+          color: "var(--accent)",
+          fontWeight: 700,
         }}
       >
-        <div style={{ marginBottom: "14px" }}>
-          <div
-            style={{
-              fontSize: "11px",
-              textTransform: "uppercase",
-              letterSpacing: "0.22em",
-              color: "var(--accent)",
-              fontWeight: 700,
-            }}
-          >
-            {t("preferences")}
-          </div>
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-          <div>
-            <div
-              style={{
-                marginBottom: "8px",
-                fontSize: "11px",
-                textTransform: "uppercase",
-                letterSpacing: "0.18em",
-                color: "var(--text-muted)",
-                fontWeight: 700,
-              }}
-            >
-              {t("language")}
-            </div>
-
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-              <OptionButton
-                active={language === "hu"}
-                onClick={() => setLanguage("hu")}
-                icon={<span style={{ transform: language === "hu" ? "scale(1.08)" : "scale(1)" }}>🇭🇺</span>}
-                label={t("hungarian")}
-              />
-
-              <OptionButton
-                active={language === "en"}
-                onClick={() => setLanguage("en")}
-                icon={<span style={{ transform: language === "en" ? "scale(1.08)" : "scale(1)" }}>🇬🇧</span>}
-                label={t("english")}
-              />
-            </div>
-          </div>
-
-          <div>
-            <div
-              style={{
-                marginBottom: "8px",
-                fontSize: "11px",
-                textTransform: "uppercase",
-                letterSpacing: "0.18em",
-                color: "var(--text-muted)",
-                fontWeight: 700,
-              }}
-            >
-              {t("theme")}
-            </div>
-
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-              <OptionButton
-                active={theme === "light"}
-                onClick={() => setTheme("light")}
-                icon={<SunIcon active={theme === "light"} />}
-                label={t("light")}
-              />
-
-              <OptionButton
-                active={theme === "dark"}
-                onClick={() => setTheme("dark")}
-                icon={<MoonIcon active={theme === "dark"} />}
-                label={t("dark")}
-              />
-            </div>
-          </div>
-        </div>
+        {t("preferences")}
       </div>
+
+      <PreferenceGroup title={t("language")}>
+        <OptionButton
+          active={language === "hu"}
+          onClick={() => setLanguage("hu")}
+          icon={
+            <span style={{ transform: language === "hu" ? "scale(1.08)" : "scale(1)" }}>
+              🇭🇺
+            </span>
+          }
+          label={t("hungarian")}
+        />
+
+        <OptionButton
+          active={language === "en"}
+          onClick={() => setLanguage("en")}
+          icon={
+            <span style={{ transform: language === "en" ? "scale(1.08)" : "scale(1)" }}>
+              🇬🇧
+            </span>
+          }
+          label={t("english")}
+        />
+      </PreferenceGroup>
+
+      <PreferenceGroup title={t("theme")}>
+        <OptionButton
+          active={theme === "light"}
+          onClick={() => setTheme("light")}
+          icon={<SunIcon active={theme === "light"} />}
+          label={t("light")}
+        />
+
+        <OptionButton
+          active={theme === "dark"}
+          onClick={() => setTheme("dark")}
+          icon={<MoonIcon active={theme === "dark"} />}
+          label={t("dark")}
+        />
+      </PreferenceGroup>
     </div>
   );
 }
